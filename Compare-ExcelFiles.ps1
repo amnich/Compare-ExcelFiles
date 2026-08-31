@@ -7,7 +7,7 @@
     join keys, and shows results in a dual-grid WPF viewer with colour-coded rows.
     Added   = green, Deleted = red, Modified = yellow, Unchanged = white.
 .AUTHOR
-    Adam Mnich
+    Adam Mnich using Github Copilot
 .NOTES
     2026.08.30 - Initial version
     - Requires ImportExcel module (will attempt to load/install if missing)
