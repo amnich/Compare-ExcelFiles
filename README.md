@@ -10,6 +10,7 @@
 ## 📌 Overview
 
 **`Compare-ExcelFiles.ps1`** is a high-performance PowerShell WPF desktop application designed for comparing two Excel (`.xlsx`, `.xls`) or delimited text (`.csv`) files with mismatched column structures, different naming conventions, combined/concatenated fields, or differing layouts.
+Created with Github Copilot based on other scripts of mine.
 
 ### 🌟 Key Capabilities
 - **🌙 Dynamic Dark & Light Theme Modes**:
@@ -56,7 +57,7 @@
 Launch the script in PowerShell:
 
 ```powershell
-& 'D:\Skrypty\Mnich_Adam_Skrypty\Compare-ExcelFiles.ps1'
+& 'Compare-ExcelFiles.ps1'
 ```
 
 ---
@@ -113,6 +114,7 @@ Launch the script in PowerShell:
 ## 📌 Przegląd narzędzia
 
 **`Compare-ExcelFiles.ps1`** to zaawansowana aplikacja PowerShell z interfejsem graficznym WPF przeznaczona do precyzyjnego porównywania dwóch plików Excel (`.xlsx`, `.xls`) lub `.csv`, które mogą różnić się strukturą kolumn, nazwami nagłówków, układem pól lub zawierać dane połączone/scalone.
+Utworzone przy pomocy Github Copilot bazując na innych moich skryptach.
 
 ### 🌟 Główne możliwości
 - **🌙 Dynamiczny Tryb Ciemny (Dark Mode) i Jasny (Light Mode)**:
@@ -159,7 +161,7 @@ Launch the script in PowerShell:
 Wpisz w konsoli PowerShell:
 
 ```powershell
-& 'D:\Skrypty\Mnich_Adam_Skrypty\Compare-ExcelFiles.ps1'
+& 'Compare-ExcelFiles.ps1'
 ```
 
 ---
@@ -211,6 +213,7 @@ Wpisz w konsoli PowerShell:
 ## 📌 Übersicht
 
 **`Compare-ExcelFiles.ps1`** ist eine leistungsstarke PowerShell-WPF-Anwendung zum präzisen Vergleich zweier Excel- (`.xlsx`, `.xls`) oder `.csv`-Dateien mit unterschiedlichen Spaltenstrukturen, variierenden Spaltennamen oder kombinierten Datenfeldern.
+Erstellt mit Github Copilot basierend auf meinen anderen Skripten.
 
 ### 🌟 Hauptfunktionen
 - **🌙 Dynamischer Dunkel- (Dark Mode) und Hellmodus (Light Mode)**:
@@ -255,7 +258,7 @@ Wpisz w konsoli PowerShell:
 Führen Sie das Skript in PowerShell aus:
 
 ```powershell
-& 'D:\Skrypty\Mnich_Adam_Skrypty\Compare-ExcelFiles.ps1'
+& 'Compare-ExcelFiles.ps1'
 ```
 
 ---
