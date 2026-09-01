@@ -18,7 +18,7 @@
 
 [CmdletBinding()]
 param ()
-
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
 #region 1. Dependencies and Modules
 $ErrorActionPreferenceCurrent = $ErrorActionPreference
 $ErrorActionPreference = 'Stop'
