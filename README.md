@@ -7,6 +7,9 @@
 <a name="english-user-guide"></a>
 # English User Guide
 
+## ❗EXE
+The uploaded EXE file was created using [PS2EXE](https://github.com/MScholtes/PS2EXE) so you can extract the script from it using the -extract switch.
+ 
 ## 📌 Overview
 
 **`Compare-ExcelFiles.ps1`** is a high-performance PowerShell WPF desktop application designed for comparing two Excel (`.xlsx`, `.xls`) or delimited text (`.csv`) files with mismatched column structures, different naming conventions, combined/concatenated fields, or differing layouts.
@@ -48,7 +51,7 @@ Created with Github Copilot based on other scripts of mine.
 
 - **Operating System**: Windows 10 / Windows 11 / Windows Server 2016+.
 - **PowerShell**: Windows PowerShell 5.1 or PowerShell Core 7+.
-- **Module**: `ImportExcel` (installed/imported automatically on launch if missing).
+- **Module**: [ImportExcel](https://github.com/dfinke/ImportExcel) (installed/imported automatically on launch if missing).
 
 ---
 
@@ -110,6 +113,8 @@ Launch the script in PowerShell:
 
 <a name="polska-instrukcja-obsługi"></a>
 # Polska Instrukcja Obsługi
+## ❗EXE
+Przesłany plik EXE został utworzony przy użyciu [PS2EXE](https://github.com/MScholtes/PS2EXE), więc możesz wyodrębnić z niego skrypt za pomocą przełącznika -extract.
 
 ## 📌 Przegląd narzędzia
 
@@ -152,7 +157,7 @@ Utworzone przy pomocy Github Copilot bazując na innych moich skryptach.
 
 - **System operacyjny**: Windows 10 / Windows 11 / Windows Server 2016+.
 - **PowerShell**: Windows PowerShell 5.1 lub PowerShell 7+.
-- **Moduł**: `ImportExcel` (instalowany/ładowany automatycznie).
+- **Moduł**: [ImportExcel](https://github.com/dfinke/ImportExcel) (instalowany/ładowany automatycznie).
 
 ---
 
@@ -210,6 +215,9 @@ Wpisz w konsoli PowerShell:
 <a name="deutsche-bedienungsanleitung"></a>
 # Deutsche Bedienungsanleitung
 
+## ❗EXE
+Die hochgeladene EXE-Datei wurde mit [PS2EXE](https://github.com/MScholtes/PS2EXE) erstellt, daher kannst du das Skript daraus mit dem -extract‑Schalter extrahieren.
+
 ## 📌 Übersicht
 
 **`Compare-ExcelFiles.ps1`** ist eine leistungsstarke PowerShell-WPF-Anwendung zum präzisen Vergleich zweier Excel- (`.xlsx`, `.xls`) oder `.csv`-Dateien mit unterschiedlichen Spaltenstrukturen, variierenden Spaltennamen oder kombinierten Datenfeldern.
@@ -249,7 +257,7 @@ Erstellt mit Github Copilot basierend auf meinen anderen Skripten.
 
 - **Betriebssystem**: Windows 10 / Windows 11 / Windows Server 2016+.
 - **PowerShell**: Windows PowerShell 5.1 oder PowerShell Core 7+.
-- **Modul**: `ImportExcel` (wird bei Bedarf automatisch installiert/geladen).
+- **Modul**: [ImportExcel](https://github.com/dfinke/ImportExcel) (wird bei Bedarf automatisch installiert/geladen).
 
 ---
 
