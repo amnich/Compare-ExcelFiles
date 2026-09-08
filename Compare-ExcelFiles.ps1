@@ -17,7 +17,13 @@
 
 
 [CmdletBinding()]
-param ()
+param (
+    [Parameter(Mandatory = $false)]
+    [switch]$DisableSpecialCharInvariance,
+
+    [Parameter(Mandatory = $false)]
+    [Nullable[bool]]$IgnoreSpecialChars = $null
+)
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
 #region 1. Dependencies and Modules
 $ErrorActionPreferenceCurrent = $ErrorActionPreference
@@ -166,13 +172,40 @@ function Set-WindowDarkMode {
 
 $Global:CurrentLang = 'PL'
 $Global:CurrentTheme = 'Light'
+$Global:IgnoreSpecialChars = $true
+$Global:IgnoreCase = $true
+$Global:TrimWhitespace = $true
+$Global:IgnoreAllSpaces = $true
+$Global:HideUnchanged = $false
 $script:SettingsPath = Join-Path $env:APPDATA 'Compare_ExcelFiles'
 $script:SettingsFile = Join-Path $script:SettingsPath 'settings.xml'
 if (-not (Test-Path $script:SettingsPath)) { New-Item -ItemType Directory -Path $script:SettingsPath -Force | Out-Null }
 
 function Save-AppSettings {
-    param([string]$Lang = $Global:CurrentLang, [string]$Theme = $Global:CurrentTheme)
-    ([pscustomobject]@{ Language = $Lang; Theme = $Theme }) | Export-Clixml -Path $script:SettingsFile -Force
+    param(
+        [string]$Lang = $Global:CurrentLang,
+        [string]$Theme = $Global:CurrentTheme,
+        [Nullable[bool]]$IgnoreSpecial = $null,
+        [Nullable[bool]]$Case = $null,
+        [Nullable[bool]]$Trim = $null,
+        [Nullable[bool]]$AllSpaces = $null,
+        [Nullable[bool]]$HideUnch = $null
+    )
+    if ($null -ne $IgnoreSpecial) { $Global:IgnoreSpecialChars = [bool]$IgnoreSpecial }
+    if ($null -ne $Case) { $Global:IgnoreCase = [bool]$Case }
+    if ($null -ne $Trim) { $Global:TrimWhitespace = [bool]$Trim }
+    if ($null -ne $AllSpaces) { $Global:IgnoreAllSpaces = [bool]$AllSpaces }
+    if ($null -ne $HideUnch) { $Global:HideUnchanged = [bool]$HideUnch }
+
+    ([pscustomobject]@{
+        Language           = $Global:CurrentLang
+        Theme              = $Global:CurrentTheme
+        IgnoreSpecialChars = $Global:IgnoreSpecialChars
+        IgnoreCase         = $Global:IgnoreCase
+        TrimWhitespace     = $Global:TrimWhitespace
+        IgnoreAllSpaces    = $Global:IgnoreAllSpaces
+        HideUnchanged      = $Global:HideUnchanged
+    }) | Export-Clixml -Path $script:SettingsFile -Force
 }
 
 function Load-AppSettings {
@@ -181,11 +214,23 @@ function Load-AppSettings {
             $s = Import-Clixml $script:SettingsFile
             if ($s.Language -in 'EN', 'PL', 'DE') { $Global:CurrentLang = $s.Language }
             if ($s.Theme -in 'Light', 'Dark') { $Global:CurrentTheme = $s.Theme }
+            if ($null -ne $s.PSObject.Properties['IgnoreSpecialChars']) { $Global:IgnoreSpecialChars = [bool]$s.IgnoreSpecialChars }
+            if ($null -ne $s.PSObject.Properties['IgnoreCase']) { $Global:IgnoreCase = [bool]$s.IgnoreCase }
+            if ($null -ne $s.PSObject.Properties['TrimWhitespace']) { $Global:TrimWhitespace = [bool]$s.TrimWhitespace }
+            if ($null -ne $s.PSObject.Properties['IgnoreAllSpaces']) { $Global:IgnoreAllSpaces = [bool]$s.IgnoreAllSpaces }
+            if ($null -ne $s.PSObject.Properties['HideUnchanged']) { $Global:HideUnchanged = [bool]$s.HideUnchanged }
         }
         catch {}
     }
 }
 try { Load-AppSettings } catch { $Global:CurrentLang = 'PL'; $Global:CurrentTheme = 'Light' }
+
+if ($DisableSpecialCharInvariance) {
+    $Global:IgnoreSpecialChars = $false
+}
+elseif ($null -ne $IgnoreSpecialChars) {
+    $Global:IgnoreSpecialChars = [bool]$IgnoreSpecialChars
+}
 
 function Get-ThemePalette {
     param([string]$Theme = $Global:CurrentTheme)
@@ -717,15 +762,15 @@ function Invoke-ExcelDiff {
     foreach ($r in $MappingRules) {
         $isDirect = ($r.MergeMode -eq 'Exact' -and $r.BaseColumns.Length -eq 1 -and $r.UpdateColumns.Length -eq 1)
         $compiledRules.Add([PSCustomObject]@{
-            IsDirect      = $isDirect
-            BaseCol       = if ($isDirect) { $r.BaseColumns[0] } else { $null }
-            UpdateCol     = if ($isDirect) { $r.UpdateColumns[0] } else { $null }
-            BaseColumns   = $r.BaseColumns
-            UpdateColumns = $r.UpdateColumns
-            MergeMode     = $r.MergeMode
-            Separator     = $r.Separator
-            Label         = $r.Label
-        })
+                IsDirect      = $isDirect
+                BaseCol       = if ($isDirect) { $r.BaseColumns[0] } else { $null }
+                UpdateCol     = if ($isDirect) { $r.UpdateColumns[0] } else { $null }
+                BaseColumns   = $r.BaseColumns
+                UpdateColumns = $r.UpdateColumns
+                MergeMode     = $r.MergeMode
+                Separator     = $r.Separator
+                Label         = $r.Label
+            })
     }
 
     # Region: Sequential Row-by-Row Comparison Mode
@@ -903,9 +948,9 @@ function Invoke-ExcelDiff {
     $resultBase = [System.Collections.ArrayList]::new()
     $resultUpdate = [System.Collections.ArrayList]::new()
 
-    $bucketDeleted   = [System.Collections.Generic.List[int]]::new()
-    $bucketAdded     = [System.Collections.Generic.List[int]]::new()
-    $bucketModified  = [System.Collections.Generic.List[int]]::new()
+    $bucketDeleted = [System.Collections.Generic.List[int]]::new()
+    $bucketAdded = [System.Collections.Generic.List[int]]::new()
+    $bucketModified = [System.Collections.Generic.List[int]]::new()
     $bucketUnchanged = [System.Collections.Generic.List[int]]::new()
 
     foreach ($key in $allKeys) {
@@ -1862,8 +1907,8 @@ function Show-CompareResult {
         }
         if ($null -ne $script:ActiveFilterPairId) {
             $indices = @($indices | Where-Object {
-                $script:ViewBase[$_]._PairId -eq $script:ActiveFilterPairId
-            })
+                    $script:ViewBase[$_]._PairId -eq $script:ActiveFilterPairId
+                })
         }
 
         $filtB = @($indices | ForEach-Object { $script:ViewBase[$_] })
@@ -1938,30 +1983,30 @@ function Show-CompareResult {
     }
 
     $dgBase.add_PreviewMouseLeftButtonDown({
-        param($s, $e)
-        $script:MouseDownRowBase = Get-VisualParentRow $e.OriginalSource
-    })
+            param($s, $e)
+            $script:MouseDownRowBase = Get-VisualParentRow $e.OriginalSource
+        })
     $dgBase.add_PreviewMouseLeftButtonUp({
-        param($s, $e)
-        $mouseUpRow = Get-VisualParentRow $e.OriginalSource
-        if ($null -ne $mouseUpRow -and $null -ne $script:MouseDownRowBase -and $mouseUpRow -eq $script:MouseDownRowBase) {
-            & $ToggleRowFilter $mouseUpRow.Item
-        }
-        $script:MouseDownRowBase = $null
-    })
+            param($s, $e)
+            $mouseUpRow = Get-VisualParentRow $e.OriginalSource
+            if ($null -ne $mouseUpRow -and $null -ne $script:MouseDownRowBase -and $mouseUpRow -eq $script:MouseDownRowBase) {
+                & $ToggleRowFilter $mouseUpRow.Item
+            }
+            $script:MouseDownRowBase = $null
+        })
 
     $dgUpdate.add_PreviewMouseLeftButtonDown({
-        param($s, $e)
-        $script:MouseDownRowUpdate = Get-VisualParentRow $e.OriginalSource
-    })
+            param($s, $e)
+            $script:MouseDownRowUpdate = Get-VisualParentRow $e.OriginalSource
+        })
     $dgUpdate.add_PreviewMouseLeftButtonUp({
-        param($s, $e)
-        $mouseUpRow = Get-VisualParentRow $e.OriginalSource
-        if ($null -ne $mouseUpRow -and $null -ne $script:MouseDownRowUpdate -and $mouseUpRow -eq $script:MouseDownRowUpdate) {
-            & $ToggleRowFilter $mouseUpRow.Item
-        }
-        $script:MouseDownRowUpdate = $null
-    })
+            param($s, $e)
+            $mouseUpRow = Get-VisualParentRow $e.OriginalSource
+            if ($null -ne $mouseUpRow -and $null -ne $script:MouseDownRowUpdate -and $mouseUpRow -eq $script:MouseDownRowUpdate) {
+                & $ToggleRowFilter $mouseUpRow.Item
+            }
+            $script:MouseDownRowUpdate = $null
+        })
 
     $RowKeyDown = {
         param($grid, $e)
@@ -1976,42 +2021,42 @@ function Show-CompareResult {
     $dgUpdate.add_KeyDown({ param($s, $e) & $RowKeyDown $dgUpdate $e })
 
     $Window.add_KeyDown({
-        param($s, $e)
-        if ($e.Key -eq [System.Windows.Input.Key]::Escape) {
-            if ($null -ne $script:ActiveFilterPairId) {
-                $e.Handled = $true
-                $script:ActiveFilterPairId = $null
-                & $FilterView
+            param($s, $e)
+            if ($e.Key -eq [System.Windows.Input.Key]::Escape) {
+                if ($null -ne $script:ActiveFilterPairId) {
+                    $e.Handled = $true
+                    $script:ActiveFilterPairId = $null
+                    & $FilterView
+                }
             }
-        }
-    })
+        })
 
     if ($btnClearRowFilter) {
         $btnClearRowFilter.add_Click({
-            $script:ActiveFilterPairId = $null
-            & $FilterView
-        })
+                $script:ActiveFilterPairId = $null
+                & $FilterView
+            })
     }
 
     $script:SearchTimer = New-Object System.Windows.Threading.DispatcherTimer
     $script:SearchTimer.Interval = [TimeSpan]::FromMilliseconds(600)
     $script:SearchTimer.add_Tick({ $script:SearchTimer.Stop(); & $FilterView })
     $txtSearch.add_TextChanged({
-        if ($null -ne $script:ActiveFilterPairId) { $script:ActiveFilterPairId = $null }
-        $script:SearchTimer.Stop()
-        $script:SearchTimer.Start()
-    })
+            if ($null -ne $script:ActiveFilterPairId) { $script:ActiveFilterPairId = $null }
+            $script:SearchTimer.Stop()
+            $script:SearchTimer.Start()
+        })
     $cmbStatus.add_SelectionChanged({
-        if ($null -ne $script:ActiveFilterPairId) { $script:ActiveFilterPairId = $null }
-        & $FilterView
-    })
+            if ($null -ne $script:ActiveFilterPairId) { $script:ActiveFilterPairId = $null }
+            & $FilterView
+        })
     $btnReset.add_Click({
-        $script:ActiveFilterPairId = $null
-        $script:PreviousSelectedPairId = $null
-        $cmbStatus.SelectedIndex = 0
-        $txtSearch.Text = ''
-        & $FilterView
-    })
+            $script:ActiveFilterPairId = $null
+            $script:PreviousSelectedPairId = $null
+            $cmbStatus.SelectedIndex = 0
+            $txtSearch.Text = ''
+            & $FilterView
+        })
 
     # Sync selection
     $SyncSelection = {
@@ -2090,6 +2135,7 @@ function Show-CompareResult {
 }
 #endregion
 
+#region 6. Show-CompareWizard function
 function Show-CompareWizard {
     [xml]$xaml = @"
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -2592,7 +2638,7 @@ function Show-CompareWizard {
         }
     }
     if ($rbJoinKeyCols) { $rbJoinKeyCols.add_Checked($UpdateJoinModeUI) }
-    if ($rbJoinByRow)   { $rbJoinByRow.add_Checked($UpdateJoinModeUI) }
+    if ($rbJoinByRow) { $rbJoinByRow.add_Checked($UpdateJoinModeUI) }
 
     $ApplyLocalization = {
         $lblWizTitle.Text = Get-Loc 'WizardTitle'
@@ -2615,7 +2661,7 @@ function Show-CompareWizard {
         $Wiz.FindName('dgcUpdate').Header = Get-Loc 'ColUpdateColumns'
         $Wiz.FindName('dgcLabel').Header = Get-Loc 'ColLabel'
         if ($rbJoinKeyCols) { $rbJoinKeyCols.Content = Get-Loc 'JoinModeKey' }
-        if ($rbJoinByRow)   { $rbJoinByRow.Content = Get-Loc 'JoinModeRow' }
+        if ($rbJoinByRow) { $rbJoinByRow.Content = Get-Loc 'JoinModeRow' }
         if ($lblJoinRowHint) { $lblJoinRowHint.Text = Get-Loc 'TipMatchByRow' }
         if ($rbJoinByRow -and $rbJoinByRow.IsChecked) {
             $lblJoinKey.Text = Get-Loc 'LblRowIndexJoin'
@@ -2861,6 +2907,13 @@ function Show-CompareWizard {
         })
 
     $btnRun.add_Click({
+            try {
+                Save-AppSettings -IgnoreSpecial ([bool]$chkIgnoreSpecialChars.IsChecked) `
+                                 -Case ([bool]$chkIgnoreCase.IsChecked) `
+                                 -Trim ([bool]$chkTrim.IsChecked) `
+                                 -AllSpaces ([bool]$chkIgnoreAllSpaces.IsChecked) `
+                                 -HideUnch ([bool]$chkHideUnchanged.IsChecked)
+            } catch {}
             if ([string]::IsNullOrWhiteSpace($script:BasePath)) {
                 [System.Windows.MessageBox]::Show((Get-Loc 'WarnNoBase'), (Get-Loc 'DialogWarn')); return
             }
