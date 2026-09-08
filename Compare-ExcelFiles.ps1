@@ -58,14 +58,90 @@ $ErrorActionPreference = $ErrorActionPreferenceCurrent
 
 #region 2. Settings, Language and Theme
 
-Add-Type -TypeDefinition @"
+if (-not ('DwmHelper' -as [type])) {
+    Add-Type -TypeDefinition @"
 using System;
 using System.Runtime.InteropServices;
+
 public class DwmHelper {
     [DllImport("dwmapi.dll", PreserveSig = true)]
     public static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
 }
-"@ -ErrorAction Ignore
+"@ -ErrorAction SilentlyContinue
+}
+
+if (-not ('FastDiffHelper' -as [type])) {
+    Add-Type -TypeDefinition @"
+using System;
+using System.Collections.Generic;
+using System.Text;
+using System.Text.RegularExpressions;
+
+public static class FastDiffHelper {
+    private static readonly Regex _rgxSpecial = new Regex(@"[^\p{L}\p{Nd}\s]", RegexOptions.Compiled);
+    private static readonly Regex _rgxWhitespace = new Regex(@"\s+", RegexOptions.Compiled);
+
+    public static string Normalize(string val, bool ignoreCase, bool trim, bool ignoreSpecial, bool ignoreAllWhitespace) {
+        if (string.IsNullOrEmpty(val)) return string.Empty;
+        string v = val;
+        if (trim) v = v.Trim();
+        if (ignoreCase) v = v.ToLowerInvariant();
+        if (ignoreSpecial) v = _rgxSpecial.Replace(v, string.Empty);
+        if (ignoreAllWhitespace) {
+            v = _rgxWhitespace.Replace(v, string.Empty);
+        } else {
+            v = _rgxWhitespace.Replace(v, " ").Trim();
+        }
+        return v;
+    }
+
+    public static bool AreEqual(string bRaw, string uRaw, bool ignoreCase, bool trim, bool ignoreSpecial, bool ignoreAllSpaces) {
+        if (string.Equals(bRaw, uRaw, StringComparison.Ordinal)) return true;
+        if (bRaw == null) bRaw = string.Empty;
+        if (uRaw == null) uRaw = string.Empty;
+        if (bRaw.Length == 0 && uRaw.Length == 0) return true;
+
+        if (ignoreCase && !ignoreSpecial && !ignoreAllSpaces && !trim) {
+            return string.Equals(bRaw, uRaw, StringComparison.OrdinalIgnoreCase);
+        }
+        if (ignoreCase && !ignoreSpecial && !ignoreAllSpaces && trim) {
+            return string.Equals(bRaw.Trim(), uRaw.Trim(), StringComparison.OrdinalIgnoreCase);
+        }
+
+        string bNorm = Normalize(bRaw, ignoreCase, trim, ignoreSpecial, ignoreAllSpaces);
+        string uNorm = Normalize(uRaw, ignoreCase, trim, ignoreSpecial, ignoreAllSpaces);
+        return string.Equals(bNorm, uNorm, StringComparison.Ordinal);
+    }
+
+    public static string MergeValues(IList<string> values, string mergeMode, string separator, bool trim) {
+        if (values == null || values.Count == 0) return string.Empty;
+        if (string.Equals(mergeMode, "Exact", StringComparison.OrdinalIgnoreCase)) {
+            string v = values[0] ?? string.Empty;
+            return trim ? v.Trim() : v;
+        }
+        if (string.Equals(mergeMode, "FirstNonEmpty", StringComparison.OrdinalIgnoreCase)) {
+            for (int i = 0; i < values.Count; i++) {
+                string v = values[i];
+                if (!string.IsNullOrEmpty(v)) {
+                    if (trim) v = v.Trim();
+                    if (!string.IsNullOrEmpty(v)) return v;
+                }
+            }
+            return string.Empty;
+        }
+        StringBuilder sb = new StringBuilder();
+        string sep = separator ?? string.Empty;
+        for (int i = 0; i < values.Count; i++) {
+            string v = values[i] ?? string.Empty;
+            if (trim) v = v.Trim();
+            if (i > 0) sb.Append(sep);
+            sb.Append(v);
+        }
+        return sb.ToString();
+    }
+}
+"@ -ErrorAction SilentlyContinue
+}
 
 function Set-WindowDarkMode {
     param(
@@ -279,46 +355,53 @@ $Global:Translations = @{
         LayoutMode            = 'Layout:'
         LayoutVert            = 'Top / Bottom (Vertical)'
         LayoutHoriz           = 'Side by Side (Horizontal)'
+        BtnClearRowFilter     = '✕ Clear Row Filter'
+        TipRowFilter          = 'Click to filter both files to this joined row (click again or press Esc to show all)'
+        JoinModeKey           = 'Match rows using Key Column(s)'
+        JoinModeRow           = 'Match rows by Row Order (Sequential / Line-by-Line)'
+        TipMatchByRow         = 'Compares Row 1 to Row 1, Row 2 to Row 2 sequentially. No key columns required.'
+        LblRowIndexJoin       = 'Sequential row comparison active: rows are matched line-by-line (Row 1 vs Row 1, Row 2 vs Row 2...)'
+        RowPrefix             = 'Row'
     }
     PL = @{
-        WizardTitle           = 'Porownywarka plikow Excel - Konfiguracja'
-        Language              = 'Jezyk:'
+        WizardTitle           = 'Porównywarka plików Excel - Konfiguracja'
+        Language              = 'Język:'
         ThemeLabel            = 'Motyw:'
         ThemeLight            = '☀️ Jasny'
         ThemeDark             = '🌙 Ciemny'
         BtnThemeToggle        = 'Motyw'
         TabFiles              = 'Pliki'
         TabMapping            = 'Mapowanie kolumn'
-        TabJoinKey            = 'Klucz laczenia'
+        TabJoinKey            = 'Klucz łączenia'
         TabOptions            = 'Opcje'
         BtnBaseFile           = 'Wybierz plik bazowy'
         BtnUpdateFile         = 'Wybierz plik aktualizacji'
         SheetLabel            = 'Arkusz:'
         LblBaseFile           = 'Plik bazowy (referencyjny):'
         LblUpdateFile         = 'Plik aktualizacji (zmiany):'
-        BtnAddMapping         = 'Dodaj regule mapowania'
+        BtnAddMapping         = 'Dodaj regułę mapowania'
         BtnEditMapping        = 'Edytuj zaznaczone'
-        BtnRemoveMapping      = 'Usun zaznaczone'
+        BtnRemoveMapping      = 'Usuń zaznaczone'
         BtnAutoMap            = '⚡ Automatyczne mapowanie'
-        BtnClearMap           = 'Wyczysc wszystko'
-        MsgAutoMapped         = 'Pomyslnie zmapowano automatycznie {0} pasujacych kolumn.'
-        WarnNoMatchingCols    = 'Nie znaleziono kolumn o pasujacych nazwach miedzy plikami.'
+        BtnClearMap           = 'Wyczyść wszystko'
+        MsgAutoMapped         = 'Pomyślnie zmapowano automatycznie {0} pasujących kolumn.'
+        WarnNoMatchingCols    = 'Nie znaleziono kolumn o pasujących nazwach między plikami.'
         ColBaseColumns        = 'Kolumna(y) bazowe'
-        ColMergeMode          = 'Tryb laczenia'
+        ColMergeMode          = 'Tryb łączenia'
         ColSeparator          = 'Separator'
         ColUpdateColumns      = 'Kolumna(y) aktualizacji'
         ColLabel              = 'Etykieta'
-        LblJoinKey            = 'Wybierz kolumny identyfikujace wiersze miedzy plikami:'
+        LblJoinKey            = 'Wybierz kolumny identyfikujące wiersze między plikami:'
         LblJoinBase           = 'Kolumny klucza w pliku bazowym:'
         LblJoinUpdate         = 'Kolumny klucza w pliku aktualizacji:'
-        LblIgnoreCase         = 'Ignoruj wielkosc liter przy porownywaniu'
-        LblTrimWhitespace     = 'Przycinaj biale znaki przed porownanem'
-        LblIgnoreSpecialChars = 'Ignoruj znaki specjalne i interpunkcje (np. przecinki, myslniki)'
-        LblIgnoreAllSpaces    = 'Ignoruj spacje i biale znaki przy porownywaniu pol'
+        LblIgnoreCase         = 'Ignoruj wielkość liter przy porównywaniu'
+        LblTrimWhitespace     = 'Przycinaj białe znaki przed porównaniem'
+        LblIgnoreSpecialChars = 'Ignoruj znaki specjalne i interpunkcję (np. przecinki, myślniki)'
+        LblIgnoreAllSpaces    = 'Ignoruj spacje i białe znaki przy porównywaniu pól'
         LblIgnoreUnchanged    = 'Ukryj niezmienione wiersze w wynikach'
-        BtnRunCompare         = 'Uruchom porownanie'
+        BtnRunCompare         = 'Uruchom porównanie'
         StatusAdded           = 'Dodany'
-        StatusDeleted         = 'Usuniety'
+        StatusDeleted         = 'Usunięty'
         StatusModified        = 'Zmieniony'
         StatusUnchanged       = 'Bez zmian'
         StatusAll             = 'Wszystkie'
@@ -329,32 +412,39 @@ $Global:Translations = @{
         ColChangedCols        = 'Zmienione kolumny'
         PanelBase             = 'Plik bazowy'
         PanelUpdate           = 'Plik aktualizacji'
-        LoadingData           = 'Trwa porownywanie, prosze czekac...'
-        WarnNoBase            = 'Prosze wybrac plik bazowy.'
-        WarnNoUpdate          = 'Prosze wybrac plik aktualizacji.'
-        WarnNoMapping         = 'Prosze dodac co najmniej jedna regule mapowania kolumn.'
-        WarnNoJoinKey         = 'Prosze wybrac co najmniej jedna kolumne klucza laczenia.'
-        WarnJoinMismatch      = 'Liczba kolumn klucza musi byc taka sama dla obu plikow.'
-        MapDialogTitle        = 'Regula mapowania kolumn'
+        LoadingData           = 'Trwa porównywanie, proszę czekać...'
+        WarnNoBase            = 'Proszę wybrać plik bazowy.'
+        WarnNoUpdate          = 'Proszę wybrać plik aktualizacji.'
+        WarnNoMapping         = 'Proszę dodać co najmniej jedną regułę mapowania kolumn.'
+        WarnNoJoinKey         = 'Proszę wybrać co najmniej jedną kolumnę klucza łączenia.'
+        WarnJoinMismatch      = 'Liczba kolumn klucza musi być taka sama dla obu plików.'
+        MapDialogTitle        = 'Reguła mapowania kolumn'
         MapBaseLabel          = 'Kolumny bazowe: (przytrzymaj Ctrl dla wielu)'
         MapUpdateLabel        = 'Kolumny aktualizacji: (przytrzymaj Ctrl dla wielu)'
-        MapMergeLabel         = 'Tryb laczenia:'
+        MapMergeLabel         = 'Tryb łączenia:'
         MapSepLabel           = 'Separator (dla Concatenate):'
-        MapLabelLabel         = 'Etykieta wyswietlania:'
+        MapLabelLabel         = 'Etykieta wyświetlania:'
         MapOK                 = 'OK'
         MapCancel             = 'Anuluj'
         ExportSaved           = 'Diff zapisany do:'
         SummaryAdded          = 'Dodane'
-        SummaryDeleted        = 'Usuniete'
+        SummaryDeleted        = 'Usunięte'
         SummaryModified       = 'Zmienione'
         SummaryUnchanged      = 'Bez zmian'
-        SummaryTotal          = 'Lacznie'
-        DialogWarn            = 'Ostrzezenie'
+        SummaryTotal          = 'Łącznie'
+        DialogWarn            = 'Ostrzeżenie'
         DialogInfo            = 'Informacja'
         SyncScroll            = 'Synchronizuj przewijanie'
-        LayoutMode            = 'Uklad widoku:'
-        LayoutVert            = 'Gora / Dol (Pionowy)'
+        LayoutMode            = 'Układ widoku:'
+        LayoutVert            = 'Góra / Dół (Pionowy)'
         LayoutHoriz           = 'Obok siebie (Poziomy)'
+        BtnClearRowFilter     = '✕ Wyczyść filtr wiersza'
+        TipRowFilter          = 'Kliknij, aby przefiltrować oba pliki do tego złączonego wiersza (ponowne kliknięcie lub Esc przywraca wszystkie)'
+        JoinModeKey           = 'Łącz wiersze używając kolumn klucza'
+        JoinModeRow           = 'Łącz wiersze według kolejności (wiersz po wierszu)'
+        TipMatchByRow         = 'Porównuje wiersz 1 z 1, wiersz 2 z 2 sekwencyjnie. Nie wymaga kolumn klucza.'
+        LblRowIndexJoin       = 'Aktywne porównywanie sekwencyjne: wiersze są łączone po kolei (Wiersz 1 vs Wiersz 1, Wiersz 2 vs Wiersz 2...)'
+        RowPrefix             = 'Wiersz'
     }
     DE = @{
         WizardTitle           = 'Excel-Vergleich - Konfiguration'
@@ -431,6 +521,13 @@ $Global:Translations = @{
         LayoutMode            = 'Duales Layout:'
         LayoutVert            = 'Oben / Unten (Vertikal)'
         LayoutHoriz           = 'Nebeneinander (Horizontal)'
+        BtnClearRowFilter     = '✕ Zeilenfilter aufheben'
+        TipRowFilter          = 'Klicken, um beide Dateien auf diese verknuepfte Zeile zu filtern (erneuter Klick oder Esc zeigt alle)'
+        JoinModeKey           = 'Zeilen anhand von Schlusselspalten verknuepfen'
+        JoinModeRow           = 'Zeilen nach Zeilenreihenfolge verknuepfen (Zeile fuer Zeile)'
+        TipMatchByRow         = 'Vergleicht Zeile 1 mit Zeile 1, Zeile 2 mit Zeile 2 sequenziell. Keine Schlusselspalten erforderlich.'
+        LblRowIndexJoin       = 'Sequenzieller Zeilenvergleich aktiv: Zeilen werden der Reihe nach verknuepft (Zeile 1 vs Zeile 1, Zeile 2 vs Zeile 2...)'
+        RowPrefix             = 'Zeile'
     }
 }
 
@@ -458,6 +555,21 @@ function Get-ScrollViewer {
         $child = [System.Windows.Media.VisualTreeHelper]::GetChild($Control, $i)
         $result = Get-ScrollViewer $child
         if ($null -ne $result) { return $result }
+    }
+    return $null
+}
+
+function Get-VisualParentRow ([System.Windows.DependencyObject]$depObj) {
+    while ($null -ne $depObj) {
+        if ($depObj -is [System.Windows.Controls.Primitives.DataGridColumnHeader] -or
+            $depObj -is [System.Windows.Controls.Primitives.ScrollBar] -or
+            $depObj -is [System.Windows.Controls.Primitives.Thumb]) {
+            return $null
+        }
+        if ($depObj -is [System.Windows.Controls.DataGridRow]) {
+            return $depObj
+        }
+        $depObj = [System.Windows.Media.VisualTreeHelper]::GetParent($depObj)
     }
     return $null
 }
@@ -527,23 +639,7 @@ function Normalize-CompareValue {
         [bool]$IgnoreSpecialChars = $false,
         [bool]$IgnoreAllWhitespace = $false
     )
-    if ([string]::IsNullOrEmpty($Value)) { return '' }
-    $v = $Value
-    if ($TrimWhitespace) { $v = $v.Trim() }
-    if ($IgnoreCase) { $v = $v.ToLowerInvariant() }
-    if ($IgnoreSpecialChars) {
-        # Keep letters and numbers across any language (Unicode \p{L}, \p{Nd}) and whitespace
-        $v = $v -replace '[^\p{L}\p{Nd}\s]', ''
-    }
-    if ($IgnoreAllWhitespace) {
-        # Strip all whitespace for reliable multi-field concatenation comparison
-        $v = $v -replace '\s+', ''
-    }
-    else {
-        # Collapse multiple spaces into single space
-        $v = ($v -replace '\s+', ' ').Trim()
-    }
-    return $v
+    return [FastDiffHelper]::Normalize($Value, $IgnoreCase, $TrimWhitespace, $IgnoreSpecialChars, $IgnoreAllWhitespace)
 }
 
 function Get-MergedValue {
@@ -557,22 +653,16 @@ function Get-MergedValue {
         [bool]$IgnoreSpecialChars = $false,
         [bool]$IgnoreAllWhitespace = $false
     )
-    $vals = @(foreach ($col in $Columns) {
-            $v = if ($null -ne $Row.$col) { $Row.$col.ToString() } else { '' }
-            if ($Trim) { $v = $v.Trim() }
-            $v
-        })
-    $result = switch ($MergeMode) {
-        'Exact' { if ($vals.Count -gt 0) { [string]$vals[0] } else { '' } }
-        'FirstNonEmpty' { [string]($vals | Where-Object { $_ -ne '' } | Select-Object -First 1) }
-        default { [string]($vals -join $Separator) }
+    if ($MergeMode -eq 'Exact' -and $Columns.Length -eq 1) {
+        $raw = if ($null -ne $Row.($Columns[0])) { $Row.($Columns[0]).ToString() } else { '' }
+        return [FastDiffHelper]::Normalize($raw, $IgnoreCase, $Trim, $IgnoreSpecialChars, $IgnoreAllWhitespace)
     }
-    if ($null -eq $result) { $result = '' }
-    return Normalize-CompareValue -Value $result `
-        -IgnoreCase $IgnoreCase `
-        -TrimWhitespace $Trim `
-        -IgnoreSpecialChars $IgnoreSpecialChars `
-        -IgnoreAllWhitespace $IgnoreAllWhitespace
+    $vals = [System.Collections.Generic.List[string]]::new($Columns.Length)
+    foreach ($col in $Columns) {
+        $vals.Add((if ($null -ne $Row.$col) { $Row.$col.ToString() } else { '' }))
+    }
+    $merged = [FastDiffHelper]::MergeValues($vals, $MergeMode, $Separator, $Trim)
+    return [FastDiffHelper]::Normalize($merged, $IgnoreCase, $Trim, $IgnoreSpecialChars, $IgnoreAllWhitespace)
 }
 
 function Build-JoinKey {
@@ -584,11 +674,15 @@ function Build-JoinKey {
         [bool]$IgnoreSpecialChars = $false,
         [bool]$IgnoreAllWhitespace = $false
     )
-    $parts = @(foreach ($col in $KeyColumns) {
-            $v = if ($null -ne $Row.$col) { $Row.$col.ToString() } else { '' }
-            Normalize-CompareValue -Value $v -IgnoreCase $IgnoreCase -TrimWhitespace $Trim -IgnoreSpecialChars $IgnoreSpecialChars -IgnoreAllWhitespace $IgnoreAllWhitespace
-        })
-    return $parts -join '|||'
+    $sb = [System.Text.StringBuilder]::new()
+    for ($i = 0; $i -lt $KeyColumns.Length; $i++) {
+        $col = $KeyColumns[$i]
+        $v = if ($null -ne $Row.$col) { $Row.$col.ToString() } else { '' }
+        $norm = [FastDiffHelper]::Normalize($v, $IgnoreCase, $Trim, $IgnoreSpecialChars, $IgnoreAllWhitespace)
+        if ($i -gt 0) { [void]$sb.Append('|||') }
+        [void]$sb.Append($norm)
+    }
+    return $sb.ToString()
 }
 
 function Invoke-ExcelDiff {
@@ -603,13 +697,190 @@ function Invoke-ExcelDiff {
         [bool]$IgnoreCase,
         [bool]$TrimWhitespace,
         [bool]$IgnoreSpecialChars = $true,
-        [bool]$IgnoreAllSpaces = $true
+        [bool]$IgnoreAllSpaces = $true,
+        [bool]$MatchByRowOrder = $false
     )
 
     $statusAdded = Get-Loc 'StatusAdded'
     $statusDeleted = Get-Loc 'StatusDeleted'
     $statusModified = Get-Loc 'StatusModified'
     $statusUnchanged = Get-Loc 'StatusUnchanged'
+
+    # Precompute property safe names to avoid repeated regex in tight loops
+    $baseSafeProps = @{}
+    foreach ($col in $BaseAllProps) { $baseSafeProps[$col] = Get-SafePropName $col }
+    $updateSafeProps = @{}
+    foreach ($col in $UpdateAllProps) { $updateSafeProps[$col] = Get-SafePropName $col }
+
+    # Precompile mapping rules for direct 1-to-1 fast-path
+    $compiledRules = [System.Collections.Generic.List[object]]::new()
+    foreach ($r in $MappingRules) {
+        $isDirect = ($r.MergeMode -eq 'Exact' -and $r.BaseColumns.Length -eq 1 -and $r.UpdateColumns.Length -eq 1)
+        $compiledRules.Add([PSCustomObject]@{
+            IsDirect      = $isDirect
+            BaseCol       = if ($isDirect) { $r.BaseColumns[0] } else { $null }
+            UpdateCol     = if ($isDirect) { $r.UpdateColumns[0] } else { $null }
+            BaseColumns   = $r.BaseColumns
+            UpdateColumns = $r.UpdateColumns
+            MergeMode     = $r.MergeMode
+            Separator     = $r.Separator
+            Label         = $r.Label
+        })
+    }
+
+    # Region: Sequential Row-by-Row Comparison Mode
+    if ($MatchByRowOrder) {
+        $rowPrefix = Get-Loc 'RowPrefix'
+        if ([string]::IsNullOrWhiteSpace($rowPrefix)) { $rowPrefix = 'Row' }
+
+        $resultBase = [System.Collections.ArrayList]::new()
+        $resultUpdate = [System.Collections.ArrayList]::new()
+
+        $bTotal = if ($null -ne $BaseData) { $BaseData.Count } else { 0 }
+        $uTotal = if ($null -ne $UpdateData) { $UpdateData.Count } else { 0 }
+        $maxRows = [Math]::Max($bTotal, $uTotal)
+
+        for ($i = 0; $i -lt $maxRows; $i++) {
+            $bRow = if ($i -lt $bTotal) { $BaseData[$i] } else { $null }
+            $uRow = if ($i -lt $uTotal) { $UpdateData[$i] } else { $null }
+
+            $pairIdx = $resultBase.Count
+            $pairId = "P_$pairIdx"
+            $key = "$rowPrefix $($i + 1)"
+
+            if ($null -eq $bRow) {
+                # Added - only in update
+                $sbUpd = [System.Text.StringBuilder]::new()
+                $uProps = [ordered]@{
+                    _DiffStatus     = $statusAdded
+                    _ChangedColumns = ''
+                    _PairId         = $pairId
+                    _JoinKey        = $key
+                }
+                foreach ($p in $UpdateAllProps) {
+                    $v = $uRow.$p
+                    $uProps[$p] = $v
+                    $uProps[$updateSafeProps[$p]] = $false
+                    if ($null -ne $v) { [void]$sbUpd.Append($v.ToString()); [void]$sbUpd.Append('|') }
+                }
+                $uProps['_SearchableText'] = $sbUpd.ToString()
+
+                $blank = [ordered]@{
+                    _DiffStatus     = $statusAdded
+                    _ChangedColumns = ''
+                    _PairId         = $pairId
+                    _JoinKey        = $key
+                }
+                foreach ($p in $BaseAllProps) {
+                    $blank[$p] = ''
+                    $blank[$baseSafeProps[$p]] = $false
+                }
+                $blank['_SearchableText'] = ''
+
+                [void]$resultBase.Add([PSCustomObject]$blank)
+                [void]$resultUpdate.Add([PSCustomObject]$uProps)
+            }
+            elseif ($null -eq $uRow) {
+                # Deleted - only in base
+                $sbBase = [System.Text.StringBuilder]::new()
+                $bProps = [ordered]@{
+                    _DiffStatus     = $statusDeleted
+                    _ChangedColumns = ''
+                    _PairId         = $pairId
+                    _JoinKey        = $key
+                }
+                foreach ($p in $BaseAllProps) {
+                    $v = $bRow.$p
+                    $bProps[$p] = $v
+                    $bProps[$baseSafeProps[$p]] = $false
+                    if ($null -ne $v) { [void]$sbBase.Append($v.ToString()); [void]$sbBase.Append('|') }
+                }
+                $bProps['_SearchableText'] = $sbBase.ToString()
+
+                $blank = [ordered]@{
+                    _DiffStatus     = $statusDeleted
+                    _ChangedColumns = ''
+                    _PairId         = $pairId
+                    _JoinKey        = $key
+                }
+                foreach ($p in $UpdateAllProps) {
+                    $blank[$p] = ''
+                    $blank[$updateSafeProps[$p]] = $false
+                }
+                $blank['_SearchableText'] = ''
+
+                [void]$resultBase.Add([PSCustomObject]$bProps)
+                [void]$resultUpdate.Add([PSCustomObject]$blank)
+            }
+            else {
+                # Both exist - compare using mapping rules
+                $changedLabels = [System.Collections.Generic.List[string]]::new()
+                $changedBaseCols = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+                $changedUpdateCols = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+
+                foreach ($rule in $compiledRules) {
+                    $isMatch = $false
+                    if ($rule.IsDirect) {
+                        $bValObj = $bRow.($rule.BaseCol)
+                        $bRaw = if ($null -ne $bValObj) { $bValObj.ToString() } else { '' }
+                        $uValObj = $uRow.($rule.UpdateCol)
+                        $uRaw = if ($null -ne $uValObj) { $uValObj.ToString() } else { '' }
+                        $isMatch = [FastDiffHelper]::AreEqual($bRaw, $uRaw, $IgnoreCase, $TrimWhitespace, $IgnoreSpecialChars, $IgnoreAllSpaces)
+                    }
+                    else {
+                        $bVal = Get-MergedValue -Row $bRow -Columns $rule.BaseColumns   -MergeMode $rule.MergeMode -Separator $rule.Separator -Trim $TrimWhitespace -IgnoreCase $IgnoreCase -IgnoreSpecialChars $IgnoreSpecialChars -IgnoreAllWhitespace $IgnoreAllSpaces
+                        $uVal = Get-MergedValue -Row $uRow -Columns $rule.UpdateColumns -MergeMode $rule.MergeMode -Separator $rule.Separator -Trim $TrimWhitespace -IgnoreCase $IgnoreCase -IgnoreSpecialChars $IgnoreSpecialChars -IgnoreAllWhitespace $IgnoreAllSpaces
+                        $isMatch = ($bVal -eq $uVal)
+                    }
+
+                    if (-not $isMatch) {
+                        $changedLabels.Add($rule.Label)
+                        foreach ($c in $rule.BaseColumns) { [void]$changedBaseCols.Add($c) }
+                        foreach ($c in $rule.UpdateColumns) { [void]$changedUpdateCols.Add($c) }
+                    }
+                }
+
+                $status = if ($changedLabels.Count -gt 0) { $statusModified } else { $statusUnchanged }
+                $changed = $changedLabels -join ', '
+
+                $sbBase = [System.Text.StringBuilder]::new()
+                $bProps = [ordered]@{
+                    _DiffStatus     = $status
+                    _ChangedColumns = $changed
+                    _PairId         = $pairId
+                    _JoinKey        = $key
+                }
+                foreach ($col in $BaseAllProps) {
+                    $v = $bRow.$col
+                    $bProps[$col] = $v
+                    $bProps[$baseSafeProps[$col]] = $changedBaseCols.Contains($col)
+                    if ($null -ne $v) { [void]$sbBase.Append($v.ToString()); [void]$sbBase.Append('|') }
+                }
+                $bProps['_SearchableText'] = $sbBase.ToString()
+
+                $sbUpd = [System.Text.StringBuilder]::new()
+                $uProps = [ordered]@{
+                    _DiffStatus     = $status
+                    _ChangedColumns = $changed
+                    _PairId         = $pairId
+                    _JoinKey        = $key
+                }
+                foreach ($col in $UpdateAllProps) {
+                    $v = $uRow.$col
+                    $uProps[$col] = $v
+                    $uProps[$updateSafeProps[$col]] = $changedUpdateCols.Contains($col)
+                    if ($null -ne $v) { [void]$sbUpd.Append($v.ToString()); [void]$sbUpd.Append('|') }
+                }
+                $uProps['_SearchableText'] = $sbUpd.ToString()
+
+                [void]$resultBase.Add([PSCustomObject]$bProps)
+                [void]$resultUpdate.Add([PSCustomObject]$uProps)
+            }
+        }
+
+        return @{ Base = $resultBase; Update = $resultUpdate }
+    }
+    # EndRegion
 
     $baseIndex = @{}
     $updateIndex = @{}
@@ -632,48 +903,97 @@ function Invoke-ExcelDiff {
     $resultBase = [System.Collections.ArrayList]::new()
     $resultUpdate = [System.Collections.ArrayList]::new()
 
-    foreach ($key in $allKeys) {
-        $baseRows = [System.Collections.Generic.List[object]]::new()
-        if ($baseIndex.ContainsKey($key)) { $baseRows = $baseIndex[$key] }
+    $bucketDeleted   = [System.Collections.Generic.List[int]]::new()
+    $bucketAdded     = [System.Collections.Generic.List[int]]::new()
+    $bucketModified  = [System.Collections.Generic.List[int]]::new()
+    $bucketUnchanged = [System.Collections.Generic.List[int]]::new()
 
-        $updateRows = [System.Collections.Generic.List[object]]::new()
+    foreach ($key in $allKeys) {
+        $baseRows = $null
+        if ($baseIndex.ContainsKey($key)) { $baseRows = $baseIndex[$key] }
+        $updateRows = $null
         if ($updateIndex.ContainsKey($key)) { $updateRows = $updateIndex[$key] }
 
-        $maxPairs = [Math]::Max($baseRows.Count, $updateRows.Count)
+        $bCount = 0
+        if ($null -ne $baseRows) { $bCount = $baseRows.Count }
+        $uCount = 0
+        if ($null -ne $updateRows) { $uCount = $updateRows.Count }
+        $maxPairs = [Math]::Max($bCount, $uCount)
 
         for ($i = 0; $i -lt $maxPairs; $i++) {
-            $bRow = if ($i -lt $baseRows.Count) { $baseRows[$i] } else { $null }
-            $uRow = if ($i -lt $updateRows.Count) { $updateRows[$i] } else { $null }
+            $bRow = $null
+            if ($null -ne $baseRows -and $i -lt $baseRows.Count) { $bRow = $baseRows[$i] }
+            $uRow = $null
+            if ($null -ne $updateRows -and $i -lt $updateRows.Count) { $uRow = $updateRows[$i] }
+
+            $pairIdx = $resultBase.Count
+            $pairId = "P_$pairIdx"
 
             if ($null -eq $bRow) {
                 # Added - only in update
-                $uRow | Add-Member -MemberType NoteProperty -Name '_DiffStatus'    -Value $statusAdded -Force
-                $uRow | Add-Member -MemberType NoteProperty -Name '_ChangedColumns'-Value '' -Force
+                $sbUpd = [System.Text.StringBuilder]::new()
+                $uProps = [ordered]@{
+                    _DiffStatus     = $statusAdded
+                    _ChangedColumns = ''
+                    _PairId         = $pairId
+                    _JoinKey        = $key
+                }
                 foreach ($p in $UpdateAllProps) {
-                    $uRow | Add-Member -MemberType NoteProperty -Name (Get-SafePropName $p) -Value $false -Force
+                    $v = $uRow.$p
+                    $uProps[$p] = $v
+                    $uProps[$updateSafeProps[$p]] = $false
+                    if ($null -ne $v) { [void]$sbUpd.Append($v.ToString()); [void]$sbUpd.Append('|') }
                 }
-                $blank = [PSCustomObject]@{ _DiffStatus = $statusAdded; _ChangedColumns = '' }
+                $uProps['_SearchableText'] = $sbUpd.ToString()
+
+                $blank = [ordered]@{
+                    _DiffStatus     = $statusAdded
+                    _ChangedColumns = ''
+                    _PairId         = $pairId
+                    _JoinKey        = $key
+                }
                 foreach ($p in $BaseAllProps) {
-                    $blank | Add-Member -MemberType NoteProperty -Name $p -Value '' -Force
-                    $blank | Add-Member -MemberType NoteProperty -Name (Get-SafePropName $p) -Value $false -Force
+                    $blank[$p] = ''
+                    $blank[$baseSafeProps[$p]] = $false
                 }
-                $resultBase.Add($blank) | Out-Null
-                $resultUpdate.Add($uRow) | Out-Null
+                $blank['_SearchableText'] = ''
+
+                [void]$resultBase.Add([PSCustomObject]$blank)
+                [void]$resultUpdate.Add([PSCustomObject]$uProps)
+                $bucketAdded.Add($pairIdx)
             }
             elseif ($null -eq $uRow) {
                 # Deleted - only in base
-                $bRow | Add-Member -MemberType NoteProperty -Name '_DiffStatus'    -Value $statusDeleted -Force
-                $bRow | Add-Member -MemberType NoteProperty -Name '_ChangedColumns'-Value '' -Force
+                $sbBase = [System.Text.StringBuilder]::new()
+                $bProps = [ordered]@{
+                    _DiffStatus     = $statusDeleted
+                    _ChangedColumns = ''
+                    _PairId         = $pairId
+                    _JoinKey        = $key
+                }
                 foreach ($p in $BaseAllProps) {
-                    $bRow | Add-Member -MemberType NoteProperty -Name (Get-SafePropName $p) -Value $false -Force
+                    $v = $bRow.$p
+                    $bProps[$p] = $v
+                    $bProps[$baseSafeProps[$p]] = $false
+                    if ($null -ne $v) { [void]$sbBase.Append($v.ToString()); [void]$sbBase.Append('|') }
                 }
-                $blank = [PSCustomObject]@{ _DiffStatus = $statusDeleted; _ChangedColumns = '' }
+                $bProps['_SearchableText'] = $sbBase.ToString()
+
+                $blank = [ordered]@{
+                    _DiffStatus     = $statusDeleted
+                    _ChangedColumns = ''
+                    _PairId         = $pairId
+                    _JoinKey        = $key
+                }
                 foreach ($p in $UpdateAllProps) {
-                    $blank | Add-Member -MemberType NoteProperty -Name $p -Value '' -Force
-                    $blank | Add-Member -MemberType NoteProperty -Name (Get-SafePropName $p) -Value $false -Force
+                    $blank[$p] = ''
+                    $blank[$updateSafeProps[$p]] = $false
                 }
-                $resultBase.Add($bRow)  | Out-Null
-                $resultUpdate.Add($blank) | Out-Null
+                $blank['_SearchableText'] = ''
+
+                [void]$resultBase.Add([PSCustomObject]$bProps)
+                [void]$resultUpdate.Add([PSCustomObject]$blank)
+                $bucketDeleted.Add($pairIdx)
             }
             else {
                 # Both exist - check each mapping rule
@@ -681,56 +1001,98 @@ function Invoke-ExcelDiff {
                 $changedBaseCols = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
                 $changedUpdateCols = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
 
-                foreach ($rule in $MappingRules) {
-                    $bVal = Get-MergedValue -Row $bRow -Columns $rule.BaseColumns   -MergeMode $rule.MergeMode -Separator $rule.Separator -Trim $TrimWhitespace -IgnoreCase $IgnoreCase -IgnoreSpecialChars $IgnoreSpecialChars -IgnoreAllWhitespace $IgnoreAllSpaces
-                    $uVal = Get-MergedValue -Row $uRow -Columns $rule.UpdateColumns -MergeMode $rule.MergeMode -Separator $rule.Separator -Trim $TrimWhitespace -IgnoreCase $IgnoreCase -IgnoreSpecialChars $IgnoreSpecialChars -IgnoreAllWhitespace $IgnoreAllSpaces
-                    if ($bVal -ne $uVal) {
+                foreach ($rule in $compiledRules) {
+                    $isMatch = $false
+                    # Fast-path for 1-to-1 direct mapping rules
+                    if ($rule.IsDirect) {
+                        $bValObj = $bRow.($rule.BaseCol)
+                        $bRaw = if ($null -ne $bValObj) { $bValObj.ToString() } else { '' }
+                        $uValObj = $uRow.($rule.UpdateCol)
+                        $uRaw = if ($null -ne $uValObj) { $uValObj.ToString() } else { '' }
+                        $isMatch = [FastDiffHelper]::AreEqual($bRaw, $uRaw, $IgnoreCase, $TrimWhitespace, $IgnoreSpecialChars, $IgnoreAllSpaces)
+                    }
+                    else {
+                        $bVal = Get-MergedValue -Row $bRow -Columns $rule.BaseColumns   -MergeMode $rule.MergeMode -Separator $rule.Separator -Trim $TrimWhitespace -IgnoreCase $IgnoreCase -IgnoreSpecialChars $IgnoreSpecialChars -IgnoreAllWhitespace $IgnoreAllSpaces
+                        $uVal = Get-MergedValue -Row $uRow -Columns $rule.UpdateColumns -MergeMode $rule.MergeMode -Separator $rule.Separator -Trim $TrimWhitespace -IgnoreCase $IgnoreCase -IgnoreSpecialChars $IgnoreSpecialChars -IgnoreAllWhitespace $IgnoreAllSpaces
+                        $isMatch = ($bVal -eq $uVal)
+                    }
+
+                    if (-not $isMatch) {
                         $changedLabels.Add($rule.Label)
                         foreach ($c in $rule.BaseColumns) { [void]$changedBaseCols.Add($c) }
                         foreach ($c in $rule.UpdateColumns) { [void]$changedUpdateCols.Add($c) }
                     }
                 }
+
                 $status = if ($changedLabels.Count -gt 0) { $statusModified } else { $statusUnchanged }
                 $changed = $changedLabels -join ', '
-                $bRow | Add-Member -MemberType NoteProperty -Name '_DiffStatus'    -Value $status  -Force
-                $bRow | Add-Member -MemberType NoteProperty -Name '_ChangedColumns'-Value $changed -Force
-                $uRow | Add-Member -MemberType NoteProperty -Name '_DiffStatus'    -Value $status  -Force
-                $uRow | Add-Member -MemberType NoteProperty -Name '_ChangedColumns'-Value $changed -Force
 
+                $sbBase = [System.Text.StringBuilder]::new()
+                $bProps = [ordered]@{
+                    _DiffStatus     = $status
+                    _ChangedColumns = $changed
+                    _PairId         = $pairId
+                    _JoinKey        = $key
+                }
                 foreach ($col in $BaseAllProps) {
-                    $pName = Get-SafePropName $col
-                    $isChg = $changedBaseCols.Contains($col)
-                    $bRow | Add-Member -MemberType NoteProperty -Name $pName -Value $isChg -Force
+                    $v = $bRow.$col
+                    $bProps[$col] = $v
+                    $bProps[$baseSafeProps[$col]] = $changedBaseCols.Contains($col)
+                    if ($null -ne $v) { [void]$sbBase.Append($v.ToString()); [void]$sbBase.Append('|') }
+                }
+                $bProps['_SearchableText'] = $sbBase.ToString()
+
+                $sbUpd = [System.Text.StringBuilder]::new()
+                $uProps = [ordered]@{
+                    _DiffStatus     = $status
+                    _ChangedColumns = $changed
+                    _PairId         = $pairId
+                    _JoinKey        = $key
                 }
                 foreach ($col in $UpdateAllProps) {
-                    $pName = Get-SafePropName $col
-                    $isChg = $changedUpdateCols.Contains($col)
-                    $uRow | Add-Member -MemberType NoteProperty -Name $pName -Value $isChg -Force
+                    $v = $uRow.$col
+                    $uProps[$col] = $v
+                    $uProps[$updateSafeProps[$col]] = $changedUpdateCols.Contains($col)
+                    if ($null -ne $v) { [void]$sbUpd.Append($v.ToString()); [void]$sbUpd.Append('|') }
                 }
+                $uProps['_SearchableText'] = $sbUpd.ToString()
 
-                $resultBase.Add($bRow)   | Out-Null
-                $resultUpdate.Add($uRow) | Out-Null
+                [void]$resultBase.Add([PSCustomObject]$bProps)
+                [void]$resultUpdate.Add([PSCustomObject]$uProps)
+
+                if ($status -eq $statusModified) {
+                    $bucketModified.Add($pairIdx)
+                }
+                else {
+                    $bucketUnchanged.Add($pairIdx)
+                }
             }
         }
     }
 
-    # Sort output: Deleted=0, Added=1, Modified=2, Unchanged=3
+    # Sort output: Deleted=0, Added=1, Modified=2, Unchanged=3 via O(N) bucket collection
     if ($resultBase.Count -eq 0) {
         return @{ Base = [System.Collections.ArrayList]::new(); Update = [System.Collections.ArrayList]::new() }
     }
-    $order = @{ "$statusDeleted" = 0; "$statusAdded" = 1; "$statusModified" = 2; "$statusUnchanged" = 3 }
-    $pairs = for ($i = 0; $i -lt $resultBase.Count; $i++) {
-        $st = "$($resultBase[$i]._DiffStatus)"
-        $sortKey = if ($order.ContainsKey($st)) { $order[$st] } else { 99 }
-        [PSCustomObject]@{ Idx = $i; SortKey = $sortKey }
-    }
-    $sortedPairs = @($pairs | Sort-Object SortKey, Idx)
 
-    $sortedBase = [System.Collections.ArrayList]::new()
-    $sortedUpdate = [System.Collections.ArrayList]::new()
-    foreach ($p in $sortedPairs) {
-        $sortedBase.Add($resultBase[$p.Idx])    | Out-Null
-        $sortedUpdate.Add($resultUpdate[$p.Idx]) | Out-Null
+    $sortedBase = [System.Collections.ArrayList]::new($resultBase.Count)
+    $sortedUpdate = [System.Collections.ArrayList]::new($resultUpdate.Count)
+
+    foreach ($idx in $bucketDeleted) {
+        [void]$sortedBase.Add($resultBase[$idx])
+        [void]$sortedUpdate.Add($resultUpdate[$idx])
+    }
+    foreach ($idx in $bucketAdded) {
+        [void]$sortedBase.Add($resultBase[$idx])
+        [void]$sortedUpdate.Add($resultUpdate[$idx])
+    }
+    foreach ($idx in $bucketModified) {
+        [void]$sortedBase.Add($resultBase[$idx])
+        [void]$sortedUpdate.Add($resultUpdate[$idx])
+    }
+    foreach ($idx in $bucketUnchanged) {
+        [void]$sortedBase.Add($resultBase[$idx])
+        [void]$sortedUpdate.Add($resultUpdate[$idx])
     }
     return @{ Base = $sortedBase; Update = $sortedUpdate }
 }
@@ -921,23 +1283,34 @@ function Show-CompareResult {
     $statusUnchanged = Get-Loc 'StatusUnchanged'
     $statusAll = Get-Loc 'StatusAll'
 
-    foreach ($row in $DiffBase) {
-        $sb = [System.Text.StringBuilder]::new()
-        foreach ($p in $row.PSObject.Properties.Name) {
-            if (-not $p.StartsWith('_') -and $null -ne $row.$p) {
-                [void]$sb.Append($row.$p.ToString()); [void]$sb.Append('|')
+    # Ensure _PairId and _SearchableText exist if not already populated by fast diff engine
+    if ($DiffBase.Count -gt 0) {
+        $hasPairId = ($DiffBase[0].PSObject.Properties.Match('_PairId').Count -gt 0)
+        $hasSearch = ($DiffBase[0].PSObject.Properties.Match('_SearchableText').Count -gt 0)
+        if (-not $hasPairId -or -not $hasSearch) {
+            for ($i = 0; $i -lt $DiffBase.Count; $i++) {
+                $b = $DiffBase[$i]
+                $u = $DiffUpdate[$i]
+                $pairId = if ($hasPairId -and $null -ne $b._PairId) { $b._PairId } else { "P_$i" }
+                if (-not $hasPairId) {
+                    $b | Add-Member -MemberType NoteProperty -Name '_PairId' -Value $pairId -Force
+                    $u | Add-Member -MemberType NoteProperty -Name '_PairId' -Value $pairId -Force
+                }
+                if (-not $hasSearch) {
+                    $sbB = [System.Text.StringBuilder]::new()
+                    foreach ($p in $b.PSObject.Properties.Name) {
+                        if (-not $p.StartsWith('_') -and $null -ne $b.$p) { [void]$sbB.Append($b.$p.ToString()); [void]$sbB.Append('|') }
+                    }
+                    $b | Add-Member -MemberType NoteProperty -Name '_SearchableText' -Value $sbB.ToString() -Force
+
+                    $sbU = [System.Text.StringBuilder]::new()
+                    foreach ($p in $u.PSObject.Properties.Name) {
+                        if (-not $p.StartsWith('_') -and $null -ne $u.$p) { [void]$sbU.Append($u.$p.ToString()); [void]$sbU.Append('|') }
+                    }
+                    $u | Add-Member -MemberType NoteProperty -Name '_SearchableText' -Value $sbU.ToString() -Force
+                }
             }
         }
-        $row | Add-Member -MemberType NoteProperty -Name '_SearchableText' -Value $sb.ToString() -Force
-    }
-    foreach ($row in $DiffUpdate) {
-        $sb = [System.Text.StringBuilder]::new()
-        foreach ($p in $row.PSObject.Properties.Name) {
-            if (-not $p.StartsWith('_') -and $null -ne $row.$p) {
-                [void]$sb.Append($row.$p.ToString()); [void]$sb.Append('|')
-            }
-        }
-        $row | Add-Member -MemberType NoteProperty -Name '_SearchableText' -Value $sb.ToString() -Force
     }
 
     $script:ViewBase = $DiffBase
@@ -1106,6 +1479,8 @@ function Show-CompareResult {
                 </StackPanel>
                 <Button x:Name="btnReset" Content="Reset" Width="90" Height="28" Margin="0,15,8,0"
                         Background="{DynamicResource BgButtonDefaultBrush}" Foreground="{DynamicResource TextPrimaryBrush}" BorderThickness="0" Cursor="Hand"/>
+                <Button x:Name="btnClearRowFilter" Content="✕ Clear Row Filter" Height="28" Padding="10,0" Margin="0,15,8,0"
+                        Background="#DC2626" Foreground="White" FontWeight="SemiBold" BorderThickness="0" Cursor="Hand" Visibility="Collapsed"/>
                 <Button x:Name="btnResTheme" Content="Theme" Width="90" Height="28" Margin="0,15,8,0"
                         Background="{DynamicResource BgButtonDefaultBrush}" Foreground="{DynamicResource TextPrimaryBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" Cursor="Hand" FontWeight="SemiBold" FontSize="12"/>
                 <CheckBox x:Name="chkSync" Content="Sync" Foreground="{DynamicResource TextPrimaryBrush}" Margin="4,18,12,0"
@@ -1128,6 +1503,7 @@ function Show-CompareResult {
                 </Border>
                 <DataGrid x:Name="dgBase" Grid.Row="1"
                           AutoGenerateColumns="True" IsReadOnly="True" CanUserSortColumns="True"
+                          SelectionMode="Single" SelectionUnit="FullRow"
                           RowHeaderWidth="0" GridLinesVisibility="Horizontal"
                           HeadersVisibility="Column" BorderThickness="0">
                     <DataGrid.ColumnHeaderStyle>
@@ -1157,6 +1533,7 @@ function Show-CompareResult {
                 </Border>
                 <DataGrid x:Name="dgUpdate" Grid.Row="1"
                           AutoGenerateColumns="True" IsReadOnly="True" CanUserSortColumns="True"
+                          SelectionMode="Single" SelectionUnit="FullRow"
                           RowHeaderWidth="0" GridLinesVisibility="Horizontal"
                           HeadersVisibility="Column" BorderThickness="0">
                     <DataGrid.ColumnHeaderStyle>
@@ -1201,6 +1578,7 @@ function Show-CompareResult {
     $cmbStatus = $Window.FindName('cmbStatus')
     $txtSearch = $Window.FindName('txtSearch')
     $btnReset = $Window.FindName('btnReset')
+    $btnClearRowFilter = $Window.FindName('btnClearRowFilter')
     $btnResTheme = $Window.FindName('btnResTheme')
     $chkSync = $Window.FindName('chkSync')
     $btnExport = $Window.FindName('btnExport')
@@ -1210,6 +1588,7 @@ function Show-CompareResult {
     $lblUpdate = $Window.FindName('lblUpdate')
 
     $btnReset.Content = Get-Loc 'DashReset'
+    if ($btnClearRowFilter) { $btnClearRowFilter.Content = Get-Loc 'BtnClearRowFilter' }
     $chkSync.Content = Get-Loc 'SyncScroll'
     $btnExport.Content = Get-Loc 'DashExport'
     $lblTitle.Text = $Title
@@ -1228,10 +1607,12 @@ function Show-CompareResult {
             $btnResTheme.Content = if ($pal.IsDark) { Get-Loc 'ThemeLight' } else { Get-Loc 'ThemeDark' }
         }
 
+        $tipText = [System.Security.SecurityElement]::Escape((Get-Loc 'TipRowFilter'))
         $rXaml = @"
 <Style xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
        TargetType="DataGridRow">
     <Setter Property="Foreground" Value="$($pal.TextPrimary)"/>
+    <Setter Property="ToolTip" Value="$tipText"/>
     <Style.Triggers>
         <DataTrigger Binding="{Binding _DiffStatus}" Value="$statusAdded">
             <Setter Property="Background" Value="$($pal.RowAddedBg)"/>
@@ -1437,6 +1818,12 @@ function Show-CompareResult {
     Add-SumItem 'Modified'  (Get-Loc 'SummaryModified')  '#FDE68A'
     Add-SumItem 'Unchanged' (Get-Loc 'SummaryUnchanged') '#9CA3AF'
 
+    $script:ActiveFilterPairId = $null
+    $script:PreviousSelectedPairId = $null
+    $script:MouseDownRowBase = $null
+    $script:MouseDownRowUpdate = $null
+    $script:IgnoreSelectionChange = $false
+
     # Filter view
     $FilterView = {
         $statusFilter = $cmbStatus.SelectedItem.Content.ToString()
@@ -1444,8 +1831,14 @@ function Show-CompareResult {
         $hasSearch = $search.Length -ge 3
 
         if ($script:ViewBase.Count -eq 0) {
-            $dgBase.ItemsSource = [System.Collections.ArrayList]::new()
-            $dgUpdate.ItemsSource = [System.Collections.ArrayList]::new()
+            $script:IgnoreSelectionChange = $true
+            try {
+                $dgBase.ItemsSource = [System.Collections.ArrayList]::new()
+                $dgUpdate.ItemsSource = [System.Collections.ArrayList]::new()
+            }
+            finally {
+                $script:IgnoreSelectionChange = $false
+            }
             if ($script:SummaryBlocks.ContainsKey('Total')) {
                 $script:SummaryBlocks['Total'].Text = '0'
                 $script:SummaryBlocks['Added'].Text = '0'
@@ -1453,6 +1846,7 @@ function Show-CompareResult {
                 $script:SummaryBlocks['Modified'].Text = '0'
                 $script:SummaryBlocks['Unchanged'].Text = '0'
             }
+            if ($btnClearRowFilter) { $btnClearRowFilter.Visibility = [System.Windows.Visibility]::Collapsed }
             return
         }
 
@@ -1466,12 +1860,58 @@ function Show-CompareResult {
                     $script:ViewUpdate[$_]._SearchableText.IndexOf($search, [System.StringComparison]::OrdinalIgnoreCase) -ge 0
                 })
         }
+        if ($null -ne $script:ActiveFilterPairId) {
+            $indices = @($indices | Where-Object {
+                $script:ViewBase[$_]._PairId -eq $script:ActiveFilterPairId
+            })
+        }
 
         $filtB = @($indices | ForEach-Object { $script:ViewBase[$_] })
         $filtU = @($indices | ForEach-Object { $script:ViewUpdate[$_] })
 
-        $dgBase.ItemsSource = [System.Collections.ArrayList]@($filtB)
-        $dgUpdate.ItemsSource = [System.Collections.ArrayList]@($filtU)
+        $script:IgnoreSelectionChange = $true
+        try {
+            $dgBase.ItemsSource = [System.Collections.ArrayList]@($filtB)
+            $dgUpdate.ItemsSource = [System.Collections.ArrayList]@($filtU)
+        }
+        finally {
+            $script:IgnoreSelectionChange = $false
+        }
+
+        if ($null -ne $script:ActiveFilterPairId -and $filtB.Count -gt 0) {
+            $script:IgnoreSelectionChange = $true
+            try {
+                $dgBase.SelectedIndex = 0
+                $dgUpdate.SelectedIndex = 0
+            }
+            finally {
+                $script:IgnoreSelectionChange = $false
+            }
+            if ($btnClearRowFilter) { $btnClearRowFilter.Visibility = [System.Windows.Visibility]::Visible }
+        }
+        else {
+            if ($btnClearRowFilter) { $btnClearRowFilter.Visibility = [System.Windows.Visibility]::Collapsed }
+            if ($null -ne $script:PreviousSelectedPairId) {
+                $prevId = $script:PreviousSelectedPairId
+                $restoreIdx = -1
+                for ($k = 0; $k -lt $filtB.Count; $k++) {
+                    if ($filtB[$k]._PairId -eq $prevId) { $restoreIdx = $k; break }
+                }
+                if ($restoreIdx -ge 0) {
+                    $script:IgnoreSelectionChange = $true
+                    try {
+                        $dgBase.SelectedIndex = $restoreIdx
+                        $dgUpdate.SelectedIndex = $restoreIdx
+                        $dgBase.ScrollIntoView($dgBase.SelectedItem)
+                        $dgUpdate.ScrollIntoView($dgUpdate.SelectedItem)
+                    }
+                    finally {
+                        $script:IgnoreSelectionChange = $false
+                    }
+                }
+                $script:PreviousSelectedPairId = $null
+            }
+        }
 
         $script:SummaryBlocks['Total'].Text = $filtB.Count.ToString('N0')
         $script:SummaryBlocks['Added'].Text = (@($filtB | Where-Object { $_._DiffStatus -eq $statusAdded })).Count.ToString('N0')
@@ -1480,12 +1920,117 @@ function Show-CompareResult {
         $script:SummaryBlocks['Unchanged'].Text = (@($filtB | Where-Object { $_._DiffStatus -eq $statusUnchanged })).Count.ToString('N0')
     }
 
+    $ToggleRowFilter = {
+        param($item)
+        if ($null -eq $item -or -not ($item.PSObject.Properties.Match('_PairId').Count -gt 0)) { return }
+        $pairId = $item._PairId
+        if ($script:ActiveFilterPairId -eq $pairId) {
+            # Already filtered to this pair -> unfilter!
+            $script:PreviousSelectedPairId = $pairId
+            $script:ActiveFilterPairId = $null
+        }
+        else {
+            # Filter to this pair!
+            $script:PreviousSelectedPairId = $pairId
+            $script:ActiveFilterPairId = $pairId
+        }
+        & $FilterView
+    }
+
+    $dgBase.add_PreviewMouseLeftButtonDown({
+        param($s, $e)
+        $script:MouseDownRowBase = Get-VisualParentRow $e.OriginalSource
+    })
+    $dgBase.add_PreviewMouseLeftButtonUp({
+        param($s, $e)
+        $mouseUpRow = Get-VisualParentRow $e.OriginalSource
+        if ($null -ne $mouseUpRow -and $null -ne $script:MouseDownRowBase -and $mouseUpRow -eq $script:MouseDownRowBase) {
+            & $ToggleRowFilter $mouseUpRow.Item
+        }
+        $script:MouseDownRowBase = $null
+    })
+
+    $dgUpdate.add_PreviewMouseLeftButtonDown({
+        param($s, $e)
+        $script:MouseDownRowUpdate = Get-VisualParentRow $e.OriginalSource
+    })
+    $dgUpdate.add_PreviewMouseLeftButtonUp({
+        param($s, $e)
+        $mouseUpRow = Get-VisualParentRow $e.OriginalSource
+        if ($null -ne $mouseUpRow -and $null -ne $script:MouseDownRowUpdate -and $mouseUpRow -eq $script:MouseDownRowUpdate) {
+            & $ToggleRowFilter $mouseUpRow.Item
+        }
+        $script:MouseDownRowUpdate = $null
+    })
+
+    $RowKeyDown = {
+        param($grid, $e)
+        if ($e.Key -in @([System.Windows.Input.Key]::Enter, [System.Windows.Input.Key]::Space)) {
+            if ($grid.SelectedItem) {
+                $e.Handled = $true
+                & $ToggleRowFilter $grid.SelectedItem
+            }
+        }
+    }
+    $dgBase.add_KeyDown({ param($s, $e) & $RowKeyDown $dgBase $e })
+    $dgUpdate.add_KeyDown({ param($s, $e) & $RowKeyDown $dgUpdate $e })
+
+    $Window.add_KeyDown({
+        param($s, $e)
+        if ($e.Key -eq [System.Windows.Input.Key]::Escape) {
+            if ($null -ne $script:ActiveFilterPairId) {
+                $e.Handled = $true
+                $script:ActiveFilterPairId = $null
+                & $FilterView
+            }
+        }
+    })
+
+    if ($btnClearRowFilter) {
+        $btnClearRowFilter.add_Click({
+            $script:ActiveFilterPairId = $null
+            & $FilterView
+        })
+    }
+
     $script:SearchTimer = New-Object System.Windows.Threading.DispatcherTimer
     $script:SearchTimer.Interval = [TimeSpan]::FromMilliseconds(600)
     $script:SearchTimer.add_Tick({ $script:SearchTimer.Stop(); & $FilterView })
-    $txtSearch.add_TextChanged({ $script:SearchTimer.Stop(); $script:SearchTimer.Start() })
-    $cmbStatus.add_SelectionChanged($FilterView)
-    $btnReset.add_Click({ $cmbStatus.SelectedIndex = 0; $txtSearch.Text = ''; & $FilterView })
+    $txtSearch.add_TextChanged({
+        if ($null -ne $script:ActiveFilterPairId) { $script:ActiveFilterPairId = $null }
+        $script:SearchTimer.Stop()
+        $script:SearchTimer.Start()
+    })
+    $cmbStatus.add_SelectionChanged({
+        if ($null -ne $script:ActiveFilterPairId) { $script:ActiveFilterPairId = $null }
+        & $FilterView
+    })
+    $btnReset.add_Click({
+        $script:ActiveFilterPairId = $null
+        $script:PreviousSelectedPairId = $null
+        $cmbStatus.SelectedIndex = 0
+        $txtSearch.Text = ''
+        & $FilterView
+    })
+
+    # Sync selection
+    $SyncSelection = {
+        param($srcGrid, $targetGrid)
+        if ($script:IgnoreSelectionChange -or -not $chkSync.IsChecked -or $null -ne $script:ActiveFilterPairId) { return }
+        $script:IgnoreSelectionChange = $true
+        try {
+            $idx = $srcGrid.SelectedIndex
+            if ($idx -ge 0 -and $idx -lt $targetGrid.Items.Count -and $targetGrid.SelectedIndex -ne $idx) {
+                $targetGrid.SelectedIndex = $idx
+                $targetGrid.ScrollIntoView($targetGrid.SelectedItem)
+            }
+        }
+        finally {
+            $script:IgnoreSelectionChange = $false
+        }
+    }
+    $dgBase.add_SelectionChanged({ param($s, $e) & $SyncSelection $dgBase $dgUpdate })
+    $dgUpdate.add_SelectionChanged({ param($s, $e) & $SyncSelection $dgUpdate $dgBase })
 
     # Sync scroll
     $script:SyncLock = $false
@@ -1924,10 +2469,18 @@ function Show-CompareWizard {
                 <Grid Margin="20">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
-                    <TextBlock x:Name="lblJoinKey" Grid.Row="0" Foreground="{DynamicResource TextPrimaryBrush}" FontWeight="SemiBold" FontSize="13" Margin="0,0,0,16" TextWrapping="Wrap"/>
-                    <Grid Grid.Row="1">
+                    <Border Grid.Row="0" Background="{DynamicResource BgCardBrush}" CornerRadius="6" Padding="14,10" Margin="0,0,0,14" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
+                        <StackPanel>
+                            <RadioButton x:Name="rbJoinKeyCols" Content="Match rows using Key Column(s)" IsChecked="True" GroupName="JoinModeGroup" Foreground="{DynamicResource TextPrimaryBrush}" FontWeight="SemiBold" FontSize="13" Margin="0,0,0,6"/>
+                            <RadioButton x:Name="rbJoinByRow"   Content="Match rows by Row Order (Sequential / Line-by-Line)" GroupName="JoinModeGroup" Foreground="{DynamicResource TextPrimaryBrush}" FontWeight="SemiBold" FontSize="13"/>
+                            <TextBlock x:Name="lblJoinRowHint" Text="Compares Row 1 to Row 1, Row 2 to Row 2 sequentially. No key columns required." Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Margin="22,4,0,0" FontStyle="Italic"/>
+                        </StackPanel>
+                    </Border>
+                    <TextBlock x:Name="lblJoinKey" Grid.Row="1" Foreground="{DynamicResource TextPrimaryBrush}" FontWeight="SemiBold" FontSize="13" Margin="0,0,0,12" TextWrapping="Wrap"/>
+                    <Grid x:Name="gridJoinCols" Grid.Row="2">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="*"/>
@@ -2002,6 +2555,10 @@ function Show-CompareWizard {
     $btnEditMap = $Wiz.FindName('btnEditMap')
     $btnRemoveMap = $Wiz.FindName('btnRemoveMap')
     $btnClearMap = $Wiz.FindName('btnClearMap')
+    $rbJoinKeyCols = $Wiz.FindName('rbJoinKeyCols')
+    $rbJoinByRow = $Wiz.FindName('rbJoinByRow')
+    $lblJoinRowHint = $Wiz.FindName('lblJoinRowHint')
+    $gridJoinCols = $Wiz.FindName('gridJoinCols')
     $lblJoinKey = $Wiz.FindName('lblJoinKey')
     $lblJoinBase = $Wiz.FindName('lblJoinBase')
     $lblJoinUpdate = $Wiz.FindName('lblJoinUpdate')
@@ -2021,6 +2578,21 @@ function Show-CompareWizard {
     $chkIgnoreAllSpaces = $Wiz.FindName('chkIgnoreAllSpaces')
     $chkHideUnchanged = $Wiz.FindName('chkHideUnchanged')
     $btnRun = $Wiz.FindName('btnRun')
+
+    $UpdateJoinModeUI = {
+        if ($rbJoinByRow.IsChecked) {
+            $gridJoinCols.IsEnabled = $false
+            $gridJoinCols.Opacity = 0.35
+            $lblJoinKey.Text = Get-Loc 'LblRowIndexJoin'
+        }
+        else {
+            $gridJoinCols.IsEnabled = $true
+            $gridJoinCols.Opacity = 1.0
+            $lblJoinKey.Text = Get-Loc 'LblJoinKey'
+        }
+    }
+    if ($rbJoinKeyCols) { $rbJoinKeyCols.add_Checked($UpdateJoinModeUI) }
+    if ($rbJoinByRow)   { $rbJoinByRow.add_Checked($UpdateJoinModeUI) }
 
     $ApplyLocalization = {
         $lblWizTitle.Text = Get-Loc 'WizardTitle'
@@ -2042,7 +2614,15 @@ function Show-CompareWizard {
         $Wiz.FindName('dgcSep').Header = Get-Loc 'ColSeparator'
         $Wiz.FindName('dgcUpdate').Header = Get-Loc 'ColUpdateColumns'
         $Wiz.FindName('dgcLabel').Header = Get-Loc 'ColLabel'
-        $lblJoinKey.Text = Get-Loc 'LblJoinKey'
+        if ($rbJoinKeyCols) { $rbJoinKeyCols.Content = Get-Loc 'JoinModeKey' }
+        if ($rbJoinByRow)   { $rbJoinByRow.Content = Get-Loc 'JoinModeRow' }
+        if ($lblJoinRowHint) { $lblJoinRowHint.Text = Get-Loc 'TipMatchByRow' }
+        if ($rbJoinByRow -and $rbJoinByRow.IsChecked) {
+            $lblJoinKey.Text = Get-Loc 'LblRowIndexJoin'
+        }
+        else {
+            $lblJoinKey.Text = Get-Loc 'LblJoinKey'
+        }
         $lblJoinBase.Text = Get-Loc 'LblJoinBase'
         $lblJoinUpdate.Text = Get-Loc 'LblJoinUpdate'
         if ($lblOptLayout) { $lblOptLayout.Text = Get-Loc 'LayoutMode' }
@@ -2290,13 +2870,19 @@ function Show-CompareWizard {
             if ($script:MapRules.Count -eq 0) {
                 [System.Windows.MessageBox]::Show((Get-Loc 'WarnNoMapping'), (Get-Loc 'DialogWarn')); return
             }
-            $joinBase = @($lbJoinBase.SelectedItems)
-            $joinUpdate = @($lbJoinUpdate.SelectedItems)
-            if ($joinBase.Count -eq 0) {
-                [System.Windows.MessageBox]::Show((Get-Loc 'WarnNoJoinKey'), (Get-Loc 'DialogWarn')); return
-            }
-            if ($joinBase.Count -ne $joinUpdate.Count) {
-                [System.Windows.MessageBox]::Show((Get-Loc 'WarnJoinMismatch'), (Get-Loc 'DialogWarn')); return
+
+            $matchByRow = ($null -ne $rbJoinByRow -and [bool]$rbJoinByRow.IsChecked)
+            $joinBase = @()
+            $joinUpdate = @()
+            if (-not $matchByRow) {
+                $joinBase = @($lbJoinBase.SelectedItems)
+                $joinUpdate = @($lbJoinUpdate.SelectedItems)
+                if ($joinBase.Count -eq 0) {
+                    [System.Windows.MessageBox]::Show((Get-Loc 'WarnNoJoinKey'), (Get-Loc 'DialogWarn')); return
+                }
+                if ($joinBase.Count -ne $joinUpdate.Count) {
+                    [System.Windows.MessageBox]::Show((Get-Loc 'WarnJoinMismatch'), (Get-Loc 'DialogWarn')); return
+                }
             }
 
             $loadFrm = New-Object System.Windows.Forms.Form
@@ -2328,7 +2914,8 @@ function Show-CompareWizard {
                     -IgnoreCase         ([bool]$chkIgnoreCase.IsChecked) `
                     -TrimWhitespace     ([bool]$chkTrim.IsChecked) `
                     -IgnoreSpecialChars ([bool]$chkIgnoreSpecialChars.IsChecked) `
-                    -IgnoreAllSpaces    ([bool]$chkIgnoreAllSpaces.IsChecked)
+                    -IgnoreAllSpaces    ([bool]$chkIgnoreAllSpaces.IsChecked) `
+                    -MatchByRowOrder    $matchByRow
 
                 if ([bool]$chkHideUnchanged.IsChecked -and $diff.Base.Count -gt 0) {
                     $unch = Get-Loc 'StatusUnchanged'
