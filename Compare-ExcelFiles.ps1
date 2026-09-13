@@ -591,6 +591,10 @@ function Get-SafePropName ([string]$ColName) {
     return "_IsChanged_" + ($ColName -replace '[^a-zA-Z0-9_]', '_')
 }
 
+function Get-SafeValPropName ([string]$ColName) {
+    return "_Val_" + ($ColName -replace '[^a-zA-Z0-9_]', '_')
+}
+
 function Get-ScrollViewer {
     param ($Control)
     if ($null -eq $Control) { return $null }
@@ -754,9 +758,17 @@ function Invoke-ExcelDiff {
 
     # Precompute property safe names to avoid repeated regex in tight loops
     $baseSafeProps = @{}
-    foreach ($col in $BaseAllProps) { $baseSafeProps[$col] = Get-SafePropName $col }
+    $baseValProps = @{}
+    foreach ($col in $BaseAllProps) {
+        $baseSafeProps[$col] = Get-SafePropName $col
+        $baseValProps[$col] = Get-SafeValPropName $col
+    }
     $updateSafeProps = @{}
-    foreach ($col in $UpdateAllProps) { $updateSafeProps[$col] = Get-SafePropName $col }
+    $updateValProps = @{}
+    foreach ($col in $UpdateAllProps) {
+        $updateSafeProps[$col] = Get-SafePropName $col
+        $updateValProps[$col] = Get-SafeValPropName $col
+    }
 
     # Precompile mapping rules for direct 1-to-1 fast-path
     $compiledRules = [System.Collections.Generic.List[object]]::new()
@@ -806,6 +818,7 @@ function Invoke-ExcelDiff {
                 foreach ($p in $UpdateAllProps) {
                     $v = $uRow.$p
                     $uProps[$p] = $v
+                    $uProps[$updateValProps[$p]] = $v
                     $uProps[$updateSafeProps[$p]] = $false
                     if ($null -ne $v) { [void]$sbUpd.Append($v.ToString()); [void]$sbUpd.Append('|') }
                 }
@@ -819,6 +832,7 @@ function Invoke-ExcelDiff {
                 }
                 foreach ($p in $BaseAllProps) {
                     $blank[$p] = ''
+                    $blank[$baseValProps[$p]] = ''
                     $blank[$baseSafeProps[$p]] = $false
                 }
                 $blank['_SearchableText'] = ''
@@ -838,6 +852,7 @@ function Invoke-ExcelDiff {
                 foreach ($p in $BaseAllProps) {
                     $v = $bRow.$p
                     $bProps[$p] = $v
+                    $bProps[$baseValProps[$p]] = $v
                     $bProps[$baseSafeProps[$p]] = $false
                     if ($null -ne $v) { [void]$sbBase.Append($v.ToString()); [void]$sbBase.Append('|') }
                 }
@@ -851,6 +866,7 @@ function Invoke-ExcelDiff {
                 }
                 foreach ($p in $UpdateAllProps) {
                     $blank[$p] = ''
+                    $blank[$updateValProps[$p]] = ''
                     $blank[$updateSafeProps[$p]] = $false
                 }
                 $blank['_SearchableText'] = ''
@@ -899,6 +915,7 @@ function Invoke-ExcelDiff {
                 foreach ($col in $BaseAllProps) {
                     $v = $bRow.$col
                     $bProps[$col] = $v
+                    $bProps[$baseValProps[$col]] = $v
                     $bProps[$baseSafeProps[$col]] = $changedBaseCols.Contains($col)
                     if ($null -ne $v) { [void]$sbBase.Append($v.ToString()); [void]$sbBase.Append('|') }
                 }
@@ -914,6 +931,7 @@ function Invoke-ExcelDiff {
                 foreach ($col in $UpdateAllProps) {
                     $v = $uRow.$col
                     $uProps[$col] = $v
+                    $uProps[$updateValProps[$col]] = $v
                     $uProps[$updateSafeProps[$col]] = $changedUpdateCols.Contains($col)
                     if ($null -ne $v) { [void]$sbUpd.Append($v.ToString()); [void]$sbUpd.Append('|') }
                 }
@@ -987,6 +1005,7 @@ function Invoke-ExcelDiff {
                 foreach ($p in $UpdateAllProps) {
                     $v = $uRow.$p
                     $uProps[$p] = $v
+                    $uProps[$updateValProps[$p]] = $v
                     $uProps[$updateSafeProps[$p]] = $false
                     if ($null -ne $v) { [void]$sbUpd.Append($v.ToString()); [void]$sbUpd.Append('|') }
                 }
@@ -1000,6 +1019,7 @@ function Invoke-ExcelDiff {
                 }
                 foreach ($p in $BaseAllProps) {
                     $blank[$p] = ''
+                    $blank[$baseValProps[$p]] = ''
                     $blank[$baseSafeProps[$p]] = $false
                 }
                 $blank['_SearchableText'] = ''
@@ -1020,6 +1040,7 @@ function Invoke-ExcelDiff {
                 foreach ($p in $BaseAllProps) {
                     $v = $bRow.$p
                     $bProps[$p] = $v
+                    $bProps[$baseValProps[$p]] = $v
                     $bProps[$baseSafeProps[$p]] = $false
                     if ($null -ne $v) { [void]$sbBase.Append($v.ToString()); [void]$sbBase.Append('|') }
                 }
@@ -1033,6 +1054,7 @@ function Invoke-ExcelDiff {
                 }
                 foreach ($p in $UpdateAllProps) {
                     $blank[$p] = ''
+                    $blank[$updateValProps[$p]] = ''
                     $blank[$updateSafeProps[$p]] = $false
                 }
                 $blank['_SearchableText'] = ''
@@ -1083,6 +1105,7 @@ function Invoke-ExcelDiff {
                 foreach ($col in $BaseAllProps) {
                     $v = $bRow.$col
                     $bProps[$col] = $v
+                    $bProps[$baseValProps[$col]] = $v
                     $bProps[$baseSafeProps[$col]] = $changedBaseCols.Contains($col)
                     if ($null -ne $v) { [void]$sbBase.Append($v.ToString()); [void]$sbBase.Append('|') }
                 }
@@ -1098,6 +1121,7 @@ function Invoke-ExcelDiff {
                 foreach ($col in $UpdateAllProps) {
                     $v = $uRow.$col
                     $uProps[$col] = $v
+                    $uProps[$updateValProps[$col]] = $v
                     $uProps[$updateSafeProps[$col]] = $changedUpdateCols.Contains($col)
                     if ($null -ne $v) { [void]$sbUpd.Append($v.ToString()); [void]$sbUpd.Append('|') }
                 }
@@ -1819,7 +1843,9 @@ function Show-CompareResult {
             $e.Cancel = $true
             return
         }
-        $e.Column.SortMemberPath = $colHeader
+        $valPropName = Get-SafeValPropName $colHeader
+        $e.Column.Binding = New-Object System.Windows.Data.Binding($valPropName)
+        $e.Column.SortMemberPath = $valPropName
         $e.Column.CanUserSort = $true
 
         $propName = Get-SafePropName $colHeader
