@@ -704,7 +704,8 @@ function Get-MergedValue {
     }
     $vals = [System.Collections.Generic.List[string]]::new($Columns.Length)
     foreach ($col in $Columns) {
-        $vals.Add((if ($null -ne $Row.$col) { $Row.$col.ToString() } else { '' }))
+        $cellVal = if ($null -ne $Row.$col) { $Row.$col.ToString() } else { '' }
+        $vals.Add($cellVal)
     }
     $merged = [FastDiffHelper]::MergeValues($vals, $MergeMode, $Separator, $Trim)
     return [FastDiffHelper]::Normalize($merged, $IgnoreCase, $Trim, $IgnoreSpecialChars, $IgnoreAllWhitespace)
