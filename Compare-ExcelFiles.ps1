@@ -10,8 +10,8 @@
     Adam Mnich using Github Copilot
 .NOTES
     2026.08.30 - Initial version
-    - Requires ImportExcel module (will attempt to load/install if missing)
-    - Can be compiled to EXE using ps2exe
+    - Zero external dependencies: uses built-in .NET standard libraries (System.IO.Compression & System.Xml)
+    - Can be compiled to standalone EXE using ps2exe
 #>
 
 
@@ -29,36 +29,14 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
 $ErrorActionPreferenceCurrent = $ErrorActionPreference
 $ErrorActionPreference = 'Stop'
 
-function Ensure-ImportExcelModule {
-    try { Import-Module ImportExcel -ErrorAction Stop }
-    catch {
-        $imported = $false
-        if ($env:USERDNSDOMAIN -match 'bgh.intra') {
-            try {
-                Import-Module '\\skatfs01\install$\scripts\ImportExcel\7.8.10\ImportExcel.psd1' -ErrorAction Stop
-                $imported = $true
-            }
-            catch {}
-        }
-        if (-not $imported) {
-            Write-Warning "Attempting to install 'ImportExcel' module..."
-            try {
-                Install-Module ImportExcel -Scope CurrentUser -Force -AllowClobber
-                Import-Module ImportExcel -ErrorAction Stop
-            }
-            catch {
-                Write-Error "The 'ImportExcel' module is required. Run: Install-Module ImportExcel -Scope CurrentUser"
-                exit 1
-            }
-        }
-    }
-}
-Ensure-ImportExcelModule
-
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName PresentationFramework
 Add-Type -AssemblyName PresentationCore
 Add-Type -AssemblyName WindowsBase
+Add-Type -AssemblyName System.Drawing
+Add-Type -AssemblyName System.IO.Compression
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+Add-Type -AssemblyName System.Xml
 $ErrorActionPreference = $ErrorActionPreferenceCurrent
 #endregion
 
@@ -147,6 +125,560 @@ public static class FastDiffHelper {
     }
 }
 "@ -ErrorAction SilentlyContinue
+}
+
+if (-not ('FastExcelHelper' -as [type])) {
+    $csharpExcel = @"
+using System;
+using System.IO;
+using System.IO.Compression;
+using System.Collections.Generic;
+using System.Globalization;
+using System.Management.Automation;
+using System.Text;
+using System.Xml;
+
+public static class FastExcelHelper {
+    private static int CellRefToColIndex(string cellRef, int fallback) {
+        if (string.IsNullOrEmpty(cellRef)) return fallback;
+        int col = 0;
+        int i = 0;
+        while (i < cellRef.Length && char.IsLetter(cellRef[i])) {
+            col = col * 26 + (char.ToUpperInvariant(cellRef[i]) - 'A' + 1);
+            i++;
+        }
+        return (col > 0) ? (col - 1) : fallback;
+    }
+
+    private static string ColIndexToName(int index) {
+        int dividend = index + 1;
+        string colName = "";
+        while (dividend > 0) {
+            int modulo = (dividend - 1) % 26;
+            colName = Convert.ToChar(65 + modulo) + colName;
+            dividend = (dividend - modulo) / 26;
+        }
+        return colName;
+    }
+
+    private static string EscapeXml(string text) {
+        if (string.IsNullOrEmpty(text)) return string.Empty;
+        var sb = new StringBuilder(text.Length + 8);
+        for (int i = 0; i < text.Length; i++) {
+            char c = text[i];
+            switch (c) {
+                case '&': sb.Append("&amp;"); break;
+                case '<': sb.Append("&lt;"); break;
+                case '>': sb.Append("&gt;"); break;
+                case '"': sb.Append("&quot;"); break;
+                case '\'': sb.Append("&apos;"); break;
+                default:
+                    if ((c >= 0x20 && c <= 0xD7FF) || c == 0x9 || c == 0xA || c == 0xD || (c >= 0xE000 && c <= 0xFFFD)) {
+                        sb.Append(c);
+                    }
+                    break;
+            }
+        }
+        return sb.ToString();
+    }
+
+    public static List<string> GetSheetNames(string filePath) {
+        var list = new List<string>();
+        if (!File.Exists(filePath)) return list;
+        using (var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+        using (var zip = new ZipArchive(stream, ZipArchiveMode.Read)) {
+            var wbEntry = zip.GetEntry("xl/workbook.xml");
+            if (wbEntry != null) {
+                using (var s = wbEntry.Open())
+                using (var xr = XmlReader.Create(s)) {
+                    while (xr.Read()) {
+                        if (xr.NodeType == XmlNodeType.Element && xr.LocalName == "sheet") {
+                            string name = xr.GetAttribute("name");
+                            if (!string.IsNullOrEmpty(name)) list.Add(name);
+                        }
+                    }
+                }
+            }
+        }
+        if (list.Count == 0) list.Add("Sheet1");
+        return list;
+    }
+
+    private static string ResolveSheetTarget(ZipArchive zip, string sheetName) {
+        var relMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var relsEntry = zip.GetEntry("xl/_rels/workbook.xml.rels");
+        if (relsEntry != null) {
+            using (var s = relsEntry.Open())
+            using (var xr = XmlReader.Create(s)) {
+                while (xr.Read()) {
+                    if (xr.NodeType == XmlNodeType.Element && xr.LocalName == "Relationship") {
+                        string id = xr.GetAttribute("Id") ?? "";
+                        string target = xr.GetAttribute("Target") ?? "";
+                        if (!string.IsNullOrEmpty(id) && !string.IsNullOrEmpty(target)) {
+                            if (!target.StartsWith("xl/")) target = "xl/" + target.TrimStart('/');
+                            relMap[id] = target;
+                        }
+                    }
+                }
+            }
+        }
+
+        string targetFound = null;
+        var wbEntry = zip.GetEntry("xl/workbook.xml");
+        if (wbEntry != null) {
+            using (var s = wbEntry.Open())
+            using (var xr = XmlReader.Create(s)) {
+                while (xr.Read()) {
+                    if (xr.NodeType == XmlNodeType.Element && xr.LocalName == "sheet") {
+                        string name = xr.GetAttribute("name") ?? "";
+                        string rId = xr.GetAttribute("r:id") ?? xr.GetAttribute("id") ?? "";
+                        if (string.IsNullOrEmpty(targetFound)) {
+                            if (relMap.ContainsKey(rId)) targetFound = relMap[rId];
+                        }
+                        if (string.Equals(name, sheetName, StringComparison.OrdinalIgnoreCase)) {
+                            if (relMap.ContainsKey(rId)) {
+                                targetFound = relMap[rId];
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (string.IsNullOrEmpty(targetFound)) {
+            targetFound = "xl/worksheets/sheet1.xml";
+        }
+        return targetFound;
+    }
+
+    private static List<string> ReadSharedStrings(ZipArchive zip) {
+        var list = new List<string>();
+        var sstEntry = zip.GetEntry("xl/sharedStrings.xml");
+        if (sstEntry == null) return list;
+
+        using (var s = sstEntry.Open())
+        using (var xr = XmlReader.Create(s)) {
+            var sb = new StringBuilder();
+            bool inSi = false;
+            while (xr.Read()) {
+                if (xr.NodeType == XmlNodeType.Element && xr.LocalName == "si") {
+                    inSi = true;
+                    sb.Length = 0;
+                } else if (inSi && (xr.NodeType == XmlNodeType.Text || xr.NodeType == XmlNodeType.SignificantWhitespace)) {
+                    sb.Append(xr.Value);
+                } else if (xr.NodeType == XmlNodeType.EndElement && xr.LocalName == "si") {
+                    list.Add(sb.ToString());
+                    inSi = false;
+                    sb.Length = 0;
+                }
+            }
+        }
+        return list;
+    }
+
+    private static HashSet<int> ReadDateStyles(ZipArchive zip) {
+        var dateStyles = new HashSet<int>();
+        var stylesEntry = zip.GetEntry("xl/styles.xml");
+        if (stylesEntry == null) return dateStyles;
+
+        var customDateNumFmts = new HashSet<int>();
+        var standardDateFmts = new HashSet<int> { 14, 15, 16, 17, 18, 19, 20, 21, 22, 45, 46, 47 };
+
+        using (var s = stylesEntry.Open())
+        using (var xr = XmlReader.Create(s)) {
+            int xfIndex = 0;
+            bool inCellXfs = false;
+
+            while (xr.Read()) {
+                if (xr.NodeType == XmlNodeType.Element) {
+                    if (xr.LocalName == "numFmt") {
+                        string idStr = xr.GetAttribute("numFmtId");
+                        string code = xr.GetAttribute("formatCode") ?? "";
+                        int numFmtId;
+                        if (int.TryParse(idStr, out numFmtId)) {
+                            string cLow = code.ToLowerInvariant();
+                            if (cLow.Contains("yy") || cLow.Contains("dd") || cLow.Contains("hh") || cLow.Contains("ss") ||
+                                (cLow.Contains("m") && (cLow.Contains("d") || cLow.Contains("y") || cLow.Contains("h")))) {
+                                customDateNumFmts.Add(numFmtId);
+                            }
+                        }
+                    } else if (xr.LocalName == "cellXfs") {
+                        inCellXfs = true;
+                        xfIndex = 0;
+                    } else if (inCellXfs && xr.LocalName == "xf") {
+                        string idStr = xr.GetAttribute("numFmtId");
+                        int numFmtId;
+                        if (int.TryParse(idStr, out numFmtId)) {
+                            if (standardDateFmts.Contains(numFmtId) || customDateNumFmts.Contains(numFmtId)) {
+                                dateStyles.Add(xfIndex);
+                            }
+                        }
+                        xfIndex++;
+                    }
+                } else if (xr.NodeType == XmlNodeType.EndElement && xr.LocalName == "cellXfs") {
+                    inCellXfs = false;
+                }
+            }
+        }
+        return dateStyles;
+    }
+
+    public static List<string> GetHeaders(string filePath, string sheetName) {
+        var headers = new List<string>();
+        if (!File.Exists(filePath)) return headers;
+
+        using (var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+        using (var zip = new ZipArchive(stream, ZipArchiveMode.Read)) {
+            var sharedStrings = ReadSharedStrings(zip);
+            string targetPath = ResolveSheetTarget(zip, sheetName);
+            var sheetEntry = zip.GetEntry(targetPath);
+            if (sheetEntry == null) return headers;
+
+            using (var ss = sheetEntry.Open())
+            using (var xr = XmlReader.Create(ss)) {
+                var rowCells = new Dictionary<int, string>();
+                int currentCellCol = -1;
+                string currentCellType = "";
+                var currentVal = new StringBuilder();
+                bool inRow = false;
+                bool inCell = false;
+                bool inVal = false;
+
+                while (xr.Read()) {
+                    if (xr.NodeType == XmlNodeType.Element) {
+                        if (xr.LocalName == "row") {
+                            inRow = true;
+                            rowCells.Clear();
+                        } else if (inRow && xr.LocalName == "c") {
+                            inCell = true;
+                            string r = xr.GetAttribute("r");
+                            currentCellType = xr.GetAttribute("t") ?? "";
+                            currentCellCol = CellRefToColIndex(r, currentCellCol + 1);
+                            currentVal.Length = 0;
+                        } else if (inCell && (xr.LocalName == "v" || xr.LocalName == "t")) {
+                            inVal = true;
+                        }
+                    } else if (inVal && (xr.NodeType == XmlNodeType.Text || xr.NodeType == XmlNodeType.SignificantWhitespace)) {
+                        currentVal.Append(xr.Value);
+                    } else if (xr.NodeType == XmlNodeType.EndElement) {
+                        if (xr.LocalName == "v" || xr.LocalName == "t") {
+                            inVal = false;
+                        } else if (xr.LocalName == "c") {
+                            inCell = false;
+                            string finalVal = currentVal.ToString();
+                            if (currentCellType == "s") {
+                                int sstIdx;
+                                if (int.TryParse(finalVal, out sstIdx) && sstIdx >= 0 && sstIdx < sharedStrings.Count) {
+                                    finalVal = sharedStrings[sstIdx];
+                                }
+                            }
+                            if (currentCellCol >= 0) {
+                                rowCells[currentCellCol] = finalVal;
+                            }
+                        } else if (xr.LocalName == "row") {
+                            if (rowCells.Count > 0) {
+                                int maxCol = 0;
+                                foreach (var k in rowCells.Keys) if (k > maxCol) maxCol = k;
+                                var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                                for (int c = 0; c <= maxCol; c++) {
+                                    string rawH = rowCells.ContainsKey(c) ? rowCells[c].Trim() : "";
+                                    if (string.IsNullOrEmpty(rawH)) rawH = "Column" + (c + 1);
+                                    string h = rawH;
+                                    int counter = 1;
+                                    while (seen.Contains(h)) {
+                                        h = rawH + "_" + counter++;
+                                    }
+                                    seen.Add(h);
+                                    headers.Add(h);
+                                }
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return headers;
+    }
+
+    public static List<PSObject> ReadSheet(string filePath, string sheetName, int endRow = 0) {
+        var results = new List<PSObject>();
+        if (!File.Exists(filePath)) return results;
+
+        using (var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+        using (var zip = new ZipArchive(stream, ZipArchiveMode.Read)) {
+            var sharedStrings = ReadSharedStrings(zip);
+            var dateStyles = ReadDateStyles(zip);
+            string targetPath = ResolveSheetTarget(zip, sheetName);
+            var sheetEntry = zip.GetEntry(targetPath);
+            if (sheetEntry == null) return results;
+
+            using (var ss = sheetEntry.Open())
+            using (var xr = XmlReader.Create(ss)) {
+                var headers = new List<string>();
+                var headerColIndices = new List<int>();
+                bool foundHeaderRow = false;
+                int rowCount = 0;
+
+                var rowCells = new Dictionary<int, object>();
+                int currentCellCol = -1;
+                string currentCellType = "";
+                int currentStyleIdx = 0;
+                var currentVal = new StringBuilder();
+                bool inRow = false;
+                bool inCell = false;
+                bool inVal = false;
+
+                while (xr.Read()) {
+                    if (xr.NodeType == XmlNodeType.Element) {
+                        if (xr.LocalName == "row") {
+                            inRow = true;
+                            rowCells.Clear();
+                            rowCount++;
+                            if (endRow > 0 && rowCount > endRow) break;
+                        } else if (inRow && xr.LocalName == "c") {
+                            inCell = true;
+                            string r = xr.GetAttribute("r");
+                            currentCellType = xr.GetAttribute("t") ?? "";
+                            string s = xr.GetAttribute("s") ?? "";
+                            currentStyleIdx = 0;
+                            int.TryParse(s, out currentStyleIdx);
+                            currentCellCol = CellRefToColIndex(r, currentCellCol + 1);
+                            currentVal.Length = 0;
+                        } else if (inCell && (xr.LocalName == "v" || xr.LocalName == "t")) {
+                            inVal = true;
+                        }
+                    } else if (inVal && (xr.NodeType == XmlNodeType.Text || xr.NodeType == XmlNodeType.SignificantWhitespace)) {
+                        currentVal.Append(xr.Value);
+                    } else if (xr.NodeType == XmlNodeType.EndElement) {
+                        if (xr.LocalName == "v" || xr.LocalName == "t") {
+                            inVal = false;
+                        } else if (xr.LocalName == "c") {
+                            inCell = false;
+                            string raw = currentVal.ToString();
+                            object val = null;
+
+                            if (currentCellType == "s") {
+                                int sstIdx;
+                                if (int.TryParse(raw, out sstIdx) && sstIdx >= 0 && sstIdx < sharedStrings.Count) {
+                                    val = sharedStrings[sstIdx];
+                                } else {
+                                    val = raw;
+                                }
+                            } else if (currentCellType == "b") {
+                                val = (raw == "1");
+                            } else if (currentCellType == "str" || currentCellType == "inlineStr") {
+                                val = raw;
+                            } else {
+                                double dVal;
+                                if (double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out dVal)) {
+                                    bool isDate = dateStyles.Contains(currentStyleIdx);
+                                    if (isDate && dVal >= 0 && dVal <= 2958465) {
+                                        try { val = DateTime.FromOADate(dVal); } catch { val = dVal; }
+                                    } else {
+                                        val = dVal;
+                                    }
+                                } else if (!string.IsNullOrEmpty(raw)) {
+                                    val = raw;
+                                }
+                            }
+
+                            if (currentCellCol >= 0 && val != null) {
+                                rowCells[currentCellCol] = val;
+                            }
+                        } else if (xr.LocalName == "row") {
+                            inRow = false;
+                            if (!foundHeaderRow) {
+                                if (rowCells.Count > 0) {
+                                    int maxCol = 0;
+                                    foreach (var k in rowCells.Keys) if (k > maxCol) maxCol = k;
+                                    var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                                    for (int c = 0; c <= maxCol; c++) {
+                                        if (rowCells.ContainsKey(c)) {
+                                            string rawH = rowCells[c].ToString().Trim();
+                                            if (string.IsNullOrEmpty(rawH)) rawH = "Column" + (c + 1);
+                                            string h = rawH;
+                                            int counter = 1;
+                                            while (seen.Contains(h)) {
+                                                h = rawH + "_" + counter++;
+                                            }
+                                            seen.Add(h);
+                                            headers.Add(h);
+                                            headerColIndices.Add(c);
+                                        }
+                                    }
+                                    foundHeaderRow = true;
+                                }
+                            } else {
+                                var pso = new PSObject();
+                                for (int h = 0; h < headers.Count; h++) {
+                                    string hName = headers[h];
+                                    int cIdx = headerColIndices[h];
+                                    object cVal = rowCells.ContainsKey(cIdx) ? rowCells[cIdx] : null;
+                                    pso.Properties.Add(new PSNoteProperty(hName, cVal));
+                                }
+                                results.Add(pso);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return results;
+    }
+
+    public static void ExportToExcel(string filePath, IEnumerable<object> rows, bool autoSize, bool freezeTopRow, bool boldTopRow) {
+        if (File.Exists(filePath)) File.Delete(filePath);
+
+        var rowList = new List<PSObject>();
+        if (rows != null) {
+            foreach (var r in rows) {
+                if (r is PSObject) rowList.Add((PSObject)r);
+                else if (r != null) rowList.Add(PSObject.AsPSObject(r));
+            }
+        }
+
+        var headers = new List<string>();
+        if (rowList.Count > 0) {
+            foreach (var p in rowList[0].Properties) {
+                headers.Add(p.Name);
+            }
+        }
+
+        var colWidths = new double[headers.Count];
+        for (int i = 0; i < headers.Count; i++) {
+            colWidths[i] = Math.Max(10.0, (double)headers[i].Length + 4.0);
+        }
+
+        if (autoSize) {
+            int scanLimit = Math.Min(rowList.Count, 200);
+            for (int r = 0; r < scanLimit; r++) {
+                var pso = rowList[r];
+                for (int c = 0; c < headers.Count; c++) {
+                    var prop = pso.Properties[headers[c]];
+                    if (prop != null && prop.Value != null) {
+                        string s = prop.Value.ToString();
+                        if (s.Length + 4 > colWidths[c]) {
+                            colWidths[c] = Math.Min(50.0, (double)s.Length + 4.0);
+                        }
+                    }
+                }
+            }
+        }
+
+        using (var fs = File.Create(filePath))
+        using (var zip = new ZipArchive(fs, ZipArchiveMode.Create)) {
+            // [Content_Types].xml
+            var ctEntry = zip.CreateEntry("[Content_Types].xml");
+            using (var sw = new StreamWriter(ctEntry.Open(), Encoding.UTF8)) {
+                sw.Write("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/><Default Extension=\"xml\" ContentType=\"application/xml\"/><Override PartName=\"/xl/workbook.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml\"/><Override PartName=\"/xl/worksheets/sheet1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/><Override PartName=\"/xl/styles.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml\"/></Types>");
+            }
+
+            // _rels/.rels
+            var relsEntry = zip.CreateEntry("_rels/.rels");
+            using (var sw = new StreamWriter(relsEntry.Open(), Encoding.UTF8)) {
+                sw.Write("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"xl/workbook.xml\"/></Relationships>");
+            }
+
+            // xl/_rels/workbook.xml.rels
+            var wbRelsEntry = zip.CreateEntry("xl/_rels/workbook.xml.rels");
+            using (var sw = new StreamWriter(wbRelsEntry.Open(), Encoding.UTF8)) {
+                sw.Write("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet1.xml\"/><Relationship Id=\"rId2\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles\" Target=\"styles.xml\"/></Relationships>");
+            }
+
+            // xl/workbook.xml
+            var wbEntry = zip.CreateEntry("xl/workbook.xml");
+            using (var sw = new StreamWriter(wbEntry.Open(), Encoding.UTF8)) {
+                sw.Write("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><sheets><sheet name=\"Sheet1\" sheetId=\"1\" r:id=\"rId1\"/></sheets></workbook>");
+            }
+
+            // xl/styles.xml
+            var stylesEntry = zip.CreateEntry("xl/styles.xml");
+            using (var sw = new StreamWriter(stylesEntry.Open(), Encoding.UTF8)) {
+                sw.Write("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><styleSheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><fonts count=\"2\"><font><sz val=\"11\"/><name val=\"Calibri\"/></font><font><b/><sz val=\"11\"/><name val=\"Calibri\"/></font></fonts><fills count=\"3\"><fill><patternFill patternType=\"none\"/></fill><fill><patternFill patternType=\"gray125\"/></fill><fill><patternFill patternType=\"solid\"><fgColor rgb=\"FFF1F5F9\"/></patternFill></fill></fills><borders count=\"2\"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style=\"thin\"><color rgb=\"FFD1D5DB\"/></left><right style=\"thin\"><color rgb=\"FFD1D5DB\"/></right><top style=\"thin\"><color rgb=\"FFD1D5DB\"/></top><bottom style=\"thin\"><color rgb=\"FFD1D5DB\"/></bottom><diagonal/></border></borders><cellStyleXfs count=\"1\"><xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\"/></cellStyleXfs><cellXfs count=\"2\"><xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\" xfId=\"0\"/><xf numFmtId=\"0\" fontId=\"1\" fillId=\"2\" borderId=\"1\" xfId=\"0\" applyFont=\"1\" applyFill=\"1\" applyBorder=\"1\"/></cellXfs><cellStyles count=\"1\"><cellStyle name=\"Normal\" xfId=\"0\" builtinId=\"0\"/></cellStyles></styleSheet>");
+            }
+
+            // xl/worksheets/sheet1.xml
+            var wsEntry = zip.CreateEntry("xl/worksheets/sheet1.xml");
+            using (var sw = new StreamWriter(wsEntry.Open(), Encoding.UTF8)) {
+                sw.Write("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">");
+
+                if (freezeTopRow) {
+                    sw.Write("<sheetViews><sheetView tabSelected=\"1\" workbookViewId=\"0\"><pane ySplit=\"1\" topLeftCell=\"A2\" activePane=\"bottomLeft\" state=\"frozen\"/></sheetView></sheetViews>");
+                }
+
+                if (headers.Count > 0) {
+                    sw.Write("<cols>");
+                    for (int c = 0; c < headers.Count; c++) {
+                        sw.Write("<col min=\"" + (c + 1) + "\" max=\"" + (c + 1) + "\" width=\"" + colWidths[c].ToString("F2", CultureInfo.InvariantCulture) + "\" customWidth=\"1\"/>");
+                    }
+                    sw.Write("</cols>");
+                }
+
+                sw.Write("<sheetData>");
+
+                // Header row
+                if (headers.Count > 0) {
+                    sw.Write("<row r=\"1\">");
+                    for (int c = 0; c < headers.Count; c++) {
+                        string colLetter = ColIndexToName(c);
+                        string cellRef = colLetter + "1";
+                        string valEsc = EscapeXml(headers[c]);
+                        string sAttr = boldTopRow ? " s=\"1\"" : "";
+                        sw.Write("<c r=\"" + cellRef + "\" t=\"inlineStr\"" + sAttr + "><is><t>" + valEsc + "</t></is></c>");
+                    }
+                    sw.Write("</row>");
+                }
+
+                // Data rows
+                for (int r = 0; r < rowList.Count; r++) {
+                    int rowNum = r + 2;
+                    var pso = rowList[r];
+                    sw.Write("<row r=\"" + rowNum + "\">");
+
+                    for (int c = 0; c < headers.Count; c++) {
+                        string colLetter = ColIndexToName(c);
+                        string cellRef = colLetter + rowNum;
+                        var prop = pso.Properties[headers[c]];
+                        object val = (prop != null) ? prop.Value : null;
+
+                        if (val == null) continue;
+
+                        if (val is bool) {
+                            bool bVal = (bool)val;
+                            sw.Write("<c r=\"" + cellRef + "\" t=\"b\"><v>" + (bVal ? "1" : "0") + "</v></c>");
+                        } else if (val is int || val is long || val is short || val is byte) {
+                            sw.Write("<c r=\"" + cellRef + "\"><v>" + val + "</v></c>");
+                        } else if (val is double) {
+                            double dVal = (double)val;
+                            sw.Write("<c r=\"" + cellRef + "\"><v>" + dVal.ToString("R", CultureInfo.InvariantCulture) + "</v></c>");
+                        } else if (val is float) {
+                            float fVal = (float)val;
+                            sw.Write("<c r=\"" + cellRef + "\"><v>" + fVal.ToString("R", CultureInfo.InvariantCulture) + "</v></c>");
+                        } else if (val is decimal) {
+                            decimal mVal = (decimal)val;
+                            sw.Write("<c r=\"" + cellRef + "\"><v>" + mVal.ToString(CultureInfo.InvariantCulture) + "</v></c>");
+                        } else {
+                            string strVal = EscapeXml(val.ToString());
+                            sw.Write("<c r=\"" + cellRef + "\" t=\"inlineStr\"><is><t>" + strVal + "</t></is></c>");
+                        }
+                    }
+
+                    sw.Write("</row>");
+                }
+
+                sw.Write("</sheetData></worksheet>");
+            }
+        }
+    }
+}
+"@
+    if ($PSVersionTable.PSVersion.Major -le 5) {
+        Add-Type -TypeDefinition $csharpExcel -ReferencedAssemblies 'System.IO.Compression', 'System.IO.Compression.FileSystem', 'System.Xml', 'System.Core', ([PSObject].Assembly.Location) -Language CSharp
+    } else {
+        Add-Type -TypeDefinition $csharpExcel -Language CSharp
+    }
 }
 
 function Set-WindowDarkMode {
@@ -633,9 +1165,14 @@ function Pick-File ([System.Windows.Controls.TextBlock]$pb, [System.Windows.Cont
         }
         else {
             $sc.IsEnabled = $true
-            $sheets = (Get-ExcelSheetInfo -Path $fd.FileName).Name
-            foreach ($s in $sheets) { [void]$sc.Items.Add($s) }
-            if ($sheets.Count -gt 0) { $sc.SelectedIndex = 0 }
+            try {
+                $sheets = [FastExcelHelper]::GetSheetNames($fd.FileName)
+                foreach ($s in $sheets) { [void]$sc.Items.Add($s) }
+                if ($sheets.Count -gt 0) { $sc.SelectedIndex = 0 }
+            }
+            catch {
+                [System.Windows.MessageBox]::Show("Failed to read Excel workbook: $_", (Get-Loc 'DialogWarn'))
+            }
         }
         return $fd.FileName
     }
@@ -661,10 +1198,9 @@ function Get-ExcelHeaders {
             if ($data) { return $data.psobject.properties.name }
         }
         else {
-            $data = Import-Excel -Path $Path -WorksheetName $Sheet -EndRow 2 -ErrorAction Stop
-            if ($data) {
-                return $data[0].psobject.properties.name |
-                Where-Object { $_ -notmatch '^(RowError|RowState|Table|ItemArray|HasErrors)$' }
+            $headers = [FastExcelHelper]::GetHeaders($Path, $Sheet)
+            if ($headers -and $headers.Count -gt 0) {
+                return @($headers | Where-Object { $_ -notmatch '^(RowError|RowState|Table|ItemArray|HasErrors)$' })
             }
         }
     }
@@ -676,8 +1212,33 @@ function Get-ExcelHeaders {
 function Load-ExcelData {
     param ([string]$Path, [string]$Sheet)
     if ($Path -match '\.csv$') { return @(Import-Csv -Path $Path -Delimiter $script:Delimiter) }
-    elseif ($Sheet -and $Sheet -ne '(CSV)') { return @(Import-Excel -Path $Path -WorksheetName $Sheet) }
-    else { return @(Import-Excel -Path $Path) }
+    else { return @([FastExcelHelper]::ReadSheet($Path, $Sheet)) }
+}
+
+function Export-Excel {
+    [CmdletBinding()]
+    param(
+        [Parameter(ValueFromPipeline = $true)]
+        [object[]]$InputObject,
+        [Parameter(Mandatory = $true)]
+        [string]$Path,
+        [switch]$AutoSize,
+        [switch]$FreezeTopRow,
+        [switch]$BoldTopRow
+    )
+    begin {
+        $rows = [System.Collections.Generic.List[object]]::new()
+    }
+    process {
+        if ($null -ne $InputObject) {
+            foreach ($item in $InputObject) {
+                $rows.Add($item)
+            }
+        }
+    }
+    end {
+        [FastExcelHelper]::ExportToExcel($Path, $rows, [bool]$AutoSize, [bool]$FreezeTopRow, [bool]$BoldTopRow)
+    }
 }
 
 function Normalize-CompareValue {

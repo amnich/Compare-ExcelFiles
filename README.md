@@ -90,7 +90,7 @@ Created with GitHub Copilot based on custom automation scripts.
 
 - **Operating System**: Windows 10 / Windows 11 / Windows Server 2016+.
 - **PowerShell**: Windows PowerShell 5.1 or PowerShell Core 7+.
-- **Module**: [ImportExcel](https://github.com/dfinke/ImportExcel) (installed/imported automatically on launch if missing).
+- **Dependencies**: None. 100% standalone using built-in standard .NET libraries (`System.IO.Compression` and `System.Xml`). No external modules or MS Office installations required.
 
 ---
 
@@ -272,7 +272,7 @@ Utworzone przy pomocy GitHub Copilot na bazie autorskich skryptów automatyzacyj
 
 - **System operacyjny**: Windows 10 / Windows 11 / Windows Server 2016+.
 - **PowerShell**: Windows PowerShell 5.1 lub PowerShell 7+.
-- **Moduł**: [ImportExcel](https://github.com/dfinke/ImportExcel) (instalowany/ładowany automatycznie w przypadku braku).
+- **Zależności**: Brak. Aplikacja w 100% samodzielna, oparta na standardowych bibliotekach .NET (`System.IO.Compression` i `System.Xml`). Nie wymaga zewnętrznych modułów ani pakietu MS Office.
 
 ---
 
@@ -454,7 +454,7 @@ Erstellt mit GitHub Copilot basierend auf bewährten Automatisierungsskripten.
 
 - **Betriebssystem**: Windows 10 / Windows 11 / Windows Server 2016+.
 - **PowerShell**: Windows PowerShell 5.1 oder PowerShell Core 7+.
-- **Modul**: [ImportExcel](https://github.com/dfinke/ImportExcel) (wird bei Bedarf automatisch installiert/geladen).
+- **Abhängigkeiten**: Keine. 100% eigenständig unter Verwendung der standardmäßigen .NET-Bibliotheken (`System.IO.Compression` und `System.Xml`). Keine externen Module oder MS Office erforderlich.
 
 ---
 
