@@ -19,6 +19,21 @@
 [CmdletBinding()]
 param (
     [Parameter(Mandatory = $false)]
+    [string]$BasePath,
+
+    [Parameter(Mandatory = $false)]
+    [string]$UpdatePath,
+
+    [Parameter(Mandatory = $false)]
+    [string]$BaseSheet,
+
+    [Parameter(Mandatory = $false)]
+    [string]$UpdateSheet,
+
+    [Parameter(Mandatory = $false)]
+    [string]$PresetPath,
+
+    [Parameter(Mandatory = $false)]
     [switch]$DisableSpecialCharInvariance,
 
     [Parameter(Mandatory = $false)]
@@ -939,6 +954,39 @@ $Global:Translations = @{
         TipMatchByRow         = 'Compares Row 1 to Row 1, Row 2 to Row 2 sequentially. No key columns required.'
         LblRowIndexJoin       = 'Sequential row comparison active: rows are matched line-by-line (Row 1 vs Row 1, Row 2 vs Row 2...)'
         RowPrefix             = 'Row'
+        BtnSwapFiles          = '⇄ Swap Files'
+        TipSwapFiles          = 'Swap Base and Update files and mappings'
+        TipDropZone           = 'Tip: Drag & drop Excel (.xlsx, .xls) or CSV files directly onto the cards'
+        WarnInvalidFileType   = 'Only Excel (.xlsx, .xls) and CSV (.csv) files are supported.'
+        BtnSaveProfile        = 'Save Profile'
+        BtnLoadProfile        = 'Load Profile'
+        BtnInvertMap          = 'Invert'
+        ProfileSaved          = 'Mapping profile saved to:'
+        ProfileLoaded         = 'Mapping profile loaded successfully.'
+        WarnProfileLoadFailed = 'Failed to load mapping profile:'
+        ProgressTitle         = 'Comparing Excel Files'
+        ProgressReadingBase   = 'Reading Base file records...'
+        ProgressReadingUpdate = 'Reading Update file records...'
+        ProgressIndexing      = 'Matching and comparing records...'
+        ProgressPopulating    = 'Building results view...'
+        ProgressElapsed       = 'Elapsed: {0}s'
+        BtnCancel             = 'Cancel'
+        MsgCancelled          = 'Comparison was cancelled by the user.'
+        BtnNextDiff           = '▼ Next Diff (F7)'
+        BtnPrevDiff           = '▲ Prev Diff (Shift+F7)'
+        BtnDiffDetails        = 'Diff Inspector'
+        MenuCopyCell          = 'Copy Cell Value'
+        MenuCopyRow           = 'Copy Row (TSV)'
+        MenuCopyDiffSummary   = 'Copy Changed Columns'
+        MsgNoMoreDiffs        = 'No more differences in this direction.'
+        InspectorColName      = 'Field / Column'
+        InspectorBaseVal      = 'Base Value'
+        InspectorUpdateVal    = 'Update Value'
+        InspectorNoChanges    = 'No differences in this row.'
+        DashExportHtml        = 'Export to HTML'
+        DashCopySummary       = 'Copy Stats'
+        HtmlReportTitle       = 'Excel Comparison Report'
+        StatsCopied           = 'Comparison statistics copied to clipboard.'
     }
     PL = @{
         WizardTitle           = 'Porównywarka plików Excel - Konfiguracja'
@@ -1022,6 +1070,39 @@ $Global:Translations = @{
         TipMatchByRow         = 'Porównuje wiersz 1 z 1, wiersz 2 z 2 sekwencyjnie. Nie wymaga kolumn klucza.'
         LblRowIndexJoin       = 'Aktywne porównywanie sekwencyjne: wiersze są łączone po kolei (Wiersz 1 vs Wiersz 1, Wiersz 2 vs Wiersz 2...)'
         RowPrefix             = 'Wiersz'
+        BtnSwapFiles          = '⇄ Zamień pliki'
+        TipSwapFiles          = 'Zamień plik bazowy i aktualizacji oraz reguły'
+        TipDropZone           = 'Wskazówka: Przeciągnij i upuść pliki Excel (.xlsx, .xls) lub CSV na karty'
+        WarnInvalidFileType   = 'Obsługiwane są tylko pliki Excel (.xlsx, .xls) oraz CSV (.csv).'
+        BtnSaveProfile        = 'Zapisz profil'
+        BtnLoadProfile        = 'Wczytaj profil'
+        BtnInvertMap          = 'Odwróć'
+        ProfileSaved          = 'Profil mapowania zapisany do:'
+        ProfileLoaded         = 'Profil mapowania został pomyślnie wczytany.'
+        WarnProfileLoadFailed = 'Nie udało się wczytać profilu mapowania:'
+        ProgressTitle         = 'Porównywanie plików Excel'
+        ProgressReadingBase   = 'Odczytywanie rekordów pliku bazowego...'
+        ProgressReadingUpdate = 'Odczytywanie rekordów pliku aktualizacji...'
+        ProgressIndexing      = 'Dopasowywanie i porównywanie rekordów...'
+        ProgressPopulating    = 'Tworzenie widoku wyników...'
+        ProgressElapsed       = 'Czas trwania: {0}s'
+        BtnCancel             = 'Anuluj'
+        MsgCancelled          = 'Porównanie zostało anulowane przez użytkownika.'
+        BtnNextDiff           = '▼ Następna różnica (F7)'
+        BtnPrevDiff           = '▲ Poprzednia różnica (Shift+F7)'
+        BtnDiffDetails        = 'Inspektor różnic'
+        MenuCopyCell          = 'Kopiuj wartość komórki'
+        MenuCopyRow           = 'Kopiuj wiersz (TSV)'
+        MenuCopyDiffSummary   = 'Kopiuj zmienione kolumny'
+        MsgNoMoreDiffs        = 'Brak dalszych różnic w tym kierunku.'
+        InspectorColName      = 'Pole / Kolumna'
+        InspectorBaseVal      = 'Wartość bazowa'
+        InspectorUpdateVal    = 'Wartość aktualizacji'
+        InspectorNoChanges    = 'Brak różnic w tym wierszu.'
+        DashExportHtml        = 'Eksportuj do HTML'
+        DashCopySummary       = 'Kopiuj statystyki'
+        HtmlReportTitle       = 'Raport porównania plików Excel'
+        StatsCopied           = 'Statystyki porównania skopiowane do schowka.'
     }
     DE = @{
         WizardTitle           = 'Excel-Vergleich - Konfiguration'
@@ -1105,6 +1186,39 @@ $Global:Translations = @{
         TipMatchByRow         = 'Vergleicht Zeile 1 mit Zeile 1, Zeile 2 mit Zeile 2 sequenziell. Keine Schlusselspalten erforderlich.'
         LblRowIndexJoin       = 'Sequenzieller Zeilenvergleich aktiv: Zeilen werden der Reihe nach verknuepft (Zeile 1 vs Zeile 1, Zeile 2 vs Zeile 2...)'
         RowPrefix             = 'Zeile'
+        BtnSwapFiles          = '⇄ Dateien tauschen'
+        TipSwapFiles          = 'Basis- und Aktualisierungsdatei sowie Zuordnungen tauschen'
+        TipDropZone           = 'Tipp: Excel- (.xlsx, .xls) oder CSV-Dateien direkt hierher ziehen'
+        WarnInvalidFileType   = 'Nur Excel- (.xlsx, .xls) und CSV-Dateien (.csv) werden unterstuetzt.'
+        BtnSaveProfile        = 'Profil speichern'
+        BtnLoadProfile        = 'Profil laden'
+        BtnInvertMap          = 'Regeln umkehren'
+        ProfileSaved          = 'Zuordnungsprofil gespeichert unter:'
+        ProfileLoaded         = 'Zuordnungsprofil erfolgreich geladen.'
+        WarnProfileLoadFailed = 'Fehler beim Laden des Zuordnungsprofils:'
+        ProgressTitle         = 'Excel-Dateien vergleichen'
+        ProgressReadingBase   = 'Datensaetze der Basisdatei werden gelesen...'
+        ProgressReadingUpdate = 'Datensaetze der Aktualisierungsdatei werden gelesen...'
+        ProgressIndexing      = 'Datensaetze werden abgeglichen und verglichen...'
+        ProgressPopulating    = 'Ergebnisansicht wird erstellt...'
+        ProgressElapsed       = 'Verstrichene Zeit: {0}s'
+        BtnCancel             = 'Abbrechen'
+        MsgCancelled          = 'Der Vergleich wurde vom Benutzer abgebrochen.'
+        BtnNextDiff           = '▼ Naechste Differenz (F7)'
+        BtnPrevDiff           = '▲ Vorherige Differenz (Shift+F7)'
+        BtnDiffDetails        = 'Differenz-Inspektor'
+        MenuCopyCell          = 'Zellwert kopieren'
+        MenuCopyRow           = 'Zeile kopieren (TSV)'
+        MenuCopyDiffSummary   = 'Geaenderte Spalten kopieren'
+        MsgNoMoreDiffs        = 'Keine weiteren Differenzen in dieser Richtung.'
+        InspectorColName      = 'Feld / Spalte'
+        InspectorBaseVal      = 'Basiswert'
+        InspectorUpdateVal    = 'Aktualisierungswert'
+        InspectorNoChanges    = 'Keine Differenzen in dieser Zeile.'
+        DashExportHtml        = 'Nach HTML exportieren'
+        DashCopySummary       = 'Statistiken kopieren'
+        HtmlReportTitle       = 'Excel-Vergleichsbericht'
+        StatsCopied           = 'Vergleichsstatistik in die Zwischenablage kopiert.'
     }
 }
 
@@ -1239,6 +1353,362 @@ function Export-Excel {
     end {
         [FastExcelHelper]::ExportToExcel($Path, $rows, [bool]$AutoSize, [bool]$FreezeTopRow, [bool]$BoldTopRow)
     }
+}
+
+function Save-MappingProfile {
+    param(
+        [string]$Path,
+        [string]$BasePath,
+        [string]$UpdatePath,
+        [string]$BaseSheet,
+        [string]$UpdateSheet,
+        [bool]$MatchByRowOrder,
+        [string[]]$JoinBaseColumns,
+        [string[]]$JoinUpdateColumns,
+        [System.Collections.IList]$MappingRules,
+        [hashtable]$Options
+    )
+    $profile = [ordered]@{
+        SchemaVersion     = '1.2'
+        Timestamp         = (Get-Date).ToString('o')
+        BasePath          = $BasePath
+        UpdatePath        = $UpdatePath
+        BaseSheet         = $BaseSheet
+        UpdateSheet       = $UpdateSheet
+        MatchByRowOrder   = $MatchByRowOrder
+        JoinBaseColumns   = @($JoinBaseColumns)
+        JoinUpdateColumns = @($JoinUpdateColumns)
+        Options           = $Options
+        MappingRules      = @(
+            foreach ($r in $MappingRules) {
+                [ordered]@{
+                    BaseColumns   = @($r.BaseColumns)
+                    UpdateColumns = @($r.UpdateColumns)
+                    MergeMode     = $r.MergeMode
+                    Separator     = $r.Separator
+                    Label         = $r.Label
+                }
+            }
+        )
+    }
+    $json = $profile | ConvertTo-Json -Depth 10
+    $dir = Split-Path $Path -Parent
+    if (-not [string]::IsNullOrWhiteSpace($dir) -and -not (Test-Path $dir)) {
+        [void][System.IO.Directory]::CreateDirectory($dir)
+    }
+    [System.IO.File]::WriteAllText($Path, $json, [System.Text.UTF8Encoding]::new($true))
+}
+
+function Load-MappingProfile {
+    param([string]$Path)
+    if (-not (Test-Path $Path)) { throw "Profile not found: $Path" }
+    $raw = [System.IO.File]::ReadAllText($Path, [System.Text.Encoding]::UTF8)
+    return ($raw | ConvertFrom-Json)
+}
+
+function Export-DiffToHtml {
+    param(
+        [string]$Path,
+        [System.Collections.IList]$DiffBase,
+        [System.Collections.IList]$DiffUpdate,
+        [string[]]$BaseAllProps,
+        [string[]]$UpdateAllProps,
+        [string]$BaseFileName,
+        [string]$UpdateFileName
+    )
+
+    $cssBlock = @'
+  <style>
+    :root {
+      --bg-page: #0f172a;
+      --bg-card: #1e293b;
+      --bg-hover: #334155;
+      --border: #334155;
+      --border-subtle: #1e293b;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --accent: #3b82f6;
+      --added-bg: rgba(34, 197, 94, 0.15);
+      --added-text: #4ade80;
+      --deleted-bg: rgba(239, 68, 68, 0.15);
+      --deleted-text: #f87171;
+      --modified-bg: rgba(245, 158, 11, 0.15);
+      --modified-text: #fbbf24;
+      --diff-cell-bg: rgba(245, 158, 11, 0.25);
+      --diff-cell-border: #f59e0b;
+    }
+    body.theme-light {
+      --bg-page: #f8fafc;
+      --bg-card: #ffffff;
+      --bg-hover: #f1f5f9;
+      --border: #e2e8f0;
+      --border-subtle: #cbd5e1;
+      --text-main: #0f172a;
+      --text-muted: #64748b;
+      --accent: #2563eb;
+      --added-bg: #dcfce7;
+      --added-text: #15803d;
+      --deleted-bg: #fee2e2;
+      --deleted-text: #b91c1c;
+      --modified-bg: #fef3c7;
+      --modified-text: #b45309;
+      --diff-cell-bg: #fde68a;
+      --diff-cell-border: #d97706;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg-page);
+      color: var(--text-main);
+      padding: 20px;
+      font-size: 13px;
+    }
+    .header {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px 20px;
+      margin-bottom: 16px;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+    }
+    .header-titles h1 { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
+    .header-titles .sub { color: var(--text-muted); font-size: 12px; }
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+    .btn-pill {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      color: var(--text-main);
+      border-radius: 20px;
+      padding: 5px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s ease;
+    }
+    .btn-pill:hover, .btn-pill.active {
+      background: var(--accent);
+      color: #ffffff;
+      border-color: var(--accent);
+    }
+    .search-input {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      color: var(--text-main);
+      border-radius: 6px;
+      padding: 6px 12px;
+      font-size: 13px;
+      min-width: 240px;
+    }
+    .table-container {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow-x: auto;
+      max-height: 75vh;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+      font-size: 12px;
+    }
+    th {
+      position: sticky;
+      top: 0;
+      background: var(--bg-card);
+      border-bottom: 2px solid var(--border);
+      padding: 8px 10px;
+      font-weight: 700;
+      color: var(--text-main);
+      white-space: nowrap;
+      z-index: 10;
+    }
+    td {
+      padding: 6px 10px;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+    tr.status-added { background: var(--added-bg); color: var(--added-text); font-weight: 600; }
+    tr.status-deleted { background: var(--deleted-bg); color: var(--deleted-text); }
+    tr.status-modified { background: var(--modified-bg); }
+    td.cell-changed {
+      background: var(--diff-cell-bg) !important;
+      border: 1.5px solid var(--diff-cell-border) !important;
+      font-weight: 700;
+      color: var(--modified-text) !important;
+    }
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+  </style>
+'@
+
+    $jsBlock = @'
+  <script>
+    let currentStatus = 'all';
+    function toggleTheme() {
+      document.body.classList.toggle('theme-light');
+    }
+    function filterStatus(st) {
+      currentStatus = st;
+      document.querySelectorAll('.toolbar .btn-pill').forEach(b => {
+        b.classList.toggle('active', b.textContent.toLowerCase().includes(st.toLowerCase()) || (st === 'all' && b.textContent.startsWith('All')));
+      });
+      applyFilters();
+    }
+    function filterSearch() {
+      applyFilters();
+    }
+    function applyFilters() {
+      const q = document.getElementById('searchInput').value.toLowerCase();
+      const rows = document.querySelectorAll('#diffTable tbody tr');
+      let visible = 0;
+      rows.forEach(r => {
+        const st = r.getAttribute('data-status');
+        const txt = r.getAttribute('data-search').toLowerCase();
+        const matchesStatus = (currentStatus === 'all' || st === currentStatus);
+        const matchesSearch = (!q || txt.includes(q));
+        if (matchesStatus && matchesSearch) {
+          r.style.display = '';
+          visible++;
+        } else {
+          r.style.display = 'none';
+        }
+      });
+      document.getElementById('rowCountLabel').textContent = 'Showing ' + visible + ' rows';
+    }
+  </script>
+'@
+
+    $sb = [System.Text.StringBuilder]::new(50000)
+    [void]$sb.AppendLine('<!DOCTYPE html>')
+    [void]$sb.AppendLine('<html lang="en">')
+    [void]$sb.AppendLine('<head>')
+    [void]$sb.AppendLine('  <meta charset="UTF-8">')
+    [void]$sb.AppendLine('  <meta name="viewport" content="width=device-width, initial-scale=1.0">')
+    [void]$sb.AppendLine(('  <title>Excel Comparison - {0} vs {1}</title>' -f [System.Net.WebUtility]::HtmlEncode($BaseFileName), [System.Net.WebUtility]::HtmlEncode($UpdateFileName)))
+    [void]$sb.AppendLine($cssBlock)
+    [void]$sb.AppendLine('</head>')
+    [void]$sb.AppendLine('<body>')
+
+    $statusAdded = Get-Loc 'StatusAdded'
+    $statusDeleted = Get-Loc 'StatusDeleted'
+    $statusModified = Get-Loc 'StatusModified'
+    $statusUnchanged = Get-Loc 'StatusUnchanged'
+
+    $cntTotal = if ($null -ne $DiffBase) { $DiffBase.Count } else { 0 }
+    $cntAdded = (@($DiffBase | Where-Object { $_._DiffStatus -eq $statusAdded })).Count
+    $cntDeleted = (@($DiffBase | Where-Object { $_._DiffStatus -eq $statusDeleted })).Count
+    $cntModified = (@($DiffBase | Where-Object { $_._DiffStatus -eq $statusModified })).Count
+    $cntUnchanged = (@($DiffBase | Where-Object { $_._DiffStatus -eq $statusUnchanged })).Count
+
+    $nowStr = (Get-Date).ToString('yyyy-MM-dd HH:mm:ss')
+
+    [void]$sb.AppendLine('  <div class="header">')
+    [void]$sb.AppendLine('    <div class="header-titles">')
+    [void]$sb.AppendLine(('      <h1>{0}</h1>' -f [System.Net.WebUtility]::HtmlEncode((Get-Loc 'HtmlReportTitle'))))
+    [void]$sb.AppendLine(('      <div class="sub">Base: <strong>{0}</strong> &nbsp;|&nbsp; Update: <strong>{1}</strong> &nbsp;|&nbsp; Generated: {2}</div>' -f [System.Net.WebUtility]::HtmlEncode($BaseFileName), [System.Net.WebUtility]::HtmlEncode($UpdateFileName), $nowStr))
+    [void]$sb.AppendLine('    </div>')
+    [void]$sb.AppendLine('    <button class="btn-pill" id="themeToggle" onclick="toggleTheme()">Theme Toggle</button>')
+    [void]$sb.AppendLine('  </div>')
+
+    [void]$sb.AppendLine('  <div class="toolbar">')
+    [void]$sb.AppendLine(('    <button class="btn-pill active" onclick="filterStatus(''all'')">All ({0})</button>' -f $cntTotal))
+    [void]$sb.AppendLine(('    <button class="btn-pill" onclick="filterStatus(''{0}'')">Modified ({1})</button>' -f $statusModified, $cntModified))
+    [void]$sb.AppendLine(('    <button class="btn-pill" onclick="filterStatus(''{0}'')">Added ({1})</button>' -f $statusAdded, $cntAdded))
+    [void]$sb.AppendLine(('    <button class="btn-pill" onclick="filterStatus(''{0}'')">Deleted ({1})</button>' -f $statusDeleted, $cntDeleted))
+    [void]$sb.AppendLine(('    <button class="btn-pill" onclick="filterStatus(''{0}'')">Unchanged ({1})</button>' -f $statusUnchanged, $cntUnchanged))
+    [void]$sb.AppendLine('    <input type="text" id="searchInput" class="search-input" placeholder="Search differences..." onkeyup="filterSearch()">')
+    [void]$sb.AppendLine(('    <span style="color:var(--text-muted);margin-left:auto;font-size:12px;" id="rowCountLabel">Showing {0} rows</span>' -f $cntTotal))
+    [void]$sb.AppendLine('  </div>')
+
+    [void]$sb.AppendLine('  <div class="table-container">')
+    [void]$sb.AppendLine('    <table id="diffTable">')
+    [void]$sb.AppendLine('      <thead>')
+    [void]$sb.AppendLine('        <tr>')
+    [void]$sb.AppendLine('          <th>#</th>')
+    [void]$sb.AppendLine('          <th>Status</th>')
+    [void]$sb.AppendLine('          <th>Changed Fields</th>')
+
+    foreach ($p in $BaseAllProps) {
+        [void]$sb.Append(('<th>Base: {0}</th>' -f [System.Net.WebUtility]::HtmlEncode($p)))
+    }
+    foreach ($p in $UpdateAllProps) {
+        [void]$sb.Append(('<th>Update: {0}</th>' -f [System.Net.WebUtility]::HtmlEncode($p)))
+    }
+    [void]$sb.AppendLine('</tr></thead><tbody>')
+
+    for ($i = 0; $i -lt $cntTotal; $i++) {
+        $b = $DiffBase[$i]
+        $u = $DiffUpdate[$i]
+        $st = $b._DiffStatus
+        $chg = if ($null -ne $b._ChangedColumns) { $b._ChangedColumns } else { '' }
+        $cls = switch ($st) {
+            $statusAdded     { 'status-added' }
+            $statusDeleted   { 'status-deleted' }
+            $statusModified  { 'status-modified' }
+            default          { 'status-unchanged' }
+        }
+
+        $searchTerms = "$chg "
+        foreach ($p in $BaseAllProps) { $searchTerms += "$($b.$p) " }
+        foreach ($p in $UpdateAllProps) { $searchTerms += "$($u.$p) " }
+        $escSearch = [System.Net.WebUtility]::HtmlEncode($searchTerms.Trim())
+
+        [void]$sb.Append(("<tr class='{0}' data-status='{1}' data-search='{2}'>" -f $cls, $st, $escSearch))
+        [void]$sb.Append(('<td>{0}</td>' -f ($i + 1)))
+        [void]$sb.Append(('<td><span class="badge">{0}</span></td>' -f [System.Net.WebUtility]::HtmlEncode($st)))
+        [void]$sb.Append(('<td>{0}</td>' -f [System.Net.WebUtility]::HtmlEncode($chg)))
+
+        foreach ($p in $BaseAllProps) {
+            $val = if ($null -ne $b.$p) { $b.$p.ToString() } else { '' }
+            $safeP = Get-SafePropName $p
+            $isChg = ($st -eq $statusModified -and $b.$safeP -eq $true)
+            $tdCls = if ($isChg) { " class='cell-changed'" } else { "" }
+            [void]$sb.Append(("<td{0}>{1}</td>" -f $tdCls, [System.Net.WebUtility]::HtmlEncode($val)))
+        }
+
+        foreach ($p in $UpdateAllProps) {
+            $val = if ($null -ne $u.$p) { $u.$p.ToString() } else { '' }
+            $safeP = Get-SafePropName $p
+            $isChg = ($st -eq $statusModified -and $u.$safeP -eq $true)
+            $tdCls = if ($isChg) { " class='cell-changed'" } else { "" }
+            [void]$sb.Append(("<td{0}>{1}</td>" -f $tdCls, [System.Net.WebUtility]::HtmlEncode($val)))
+        }
+
+        [void]$sb.AppendLine('</tr>')
+    }
+
+    [void]$sb.AppendLine('      </tbody>')
+    [void]$sb.AppendLine('    </table>')
+    [void]$sb.AppendLine('  </div>')
+    [void]$sb.AppendLine($jsBlock)
+    [void]$sb.AppendLine('</body>')
+    [void]$sb.AppendLine('</html>')
+
+    $dir = Split-Path $Path -Parent
+    if (-not [string]::IsNullOrWhiteSpace($dir) -and -not (Test-Path $dir)) {
+        [void][System.IO.Directory]::CreateDirectory($dir)
+    }
+    [System.IO.File]::WriteAllText($Path, $sb.ToString(), [System.Text.UTF8Encoding]::new($true))
 }
 
 function Normalize-CompareValue {
@@ -2086,6 +2556,7 @@ function Show-CompareResult {
             <RowDefinition Height="*"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
         <TextBlock Grid.Row="0"
@@ -2108,17 +2579,28 @@ function Show-CompareResult {
                     <TextBlock x:Name="lblSearch" Text="Search:" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,2" FontSize="11"/>
                     <TextBox x:Name="txtSearch" Width="200" Padding="6,4" Background="{DynamicResource BgInputBrush}" Foreground="{DynamicResource TextPrimaryBrush}" BorderBrush="{DynamicResource BorderBrush}"/>
                 </StackPanel>
-                <Button x:Name="btnReset" Content="Reset" Width="90" Height="28" Margin="0,15,8,0"
+                <Button x:Name="btnReset" Content="Reset" Width="85" Height="28" Margin="0,15,6,0"
                         Background="{DynamicResource BgButtonDefaultBrush}" Foreground="{DynamicResource TextPrimaryBrush}" BorderThickness="0" Cursor="Hand"/>
-                <Button x:Name="btnClearRowFilter" Content="✕ Clear Row Filter" Height="28" Padding="10,0" Margin="0,15,8,0"
+                <Button x:Name="btnClearRowFilter" Content="✕ Clear Row Filter" Height="28" Padding="10,0" Margin="0,15,6,0"
                         Background="#DC2626" Foreground="White" FontWeight="SemiBold" BorderThickness="0" Cursor="Hand" Visibility="Collapsed"/>
-                <Button x:Name="btnResTheme" Content="Theme" Width="90" Height="28" Margin="0,15,8,0"
+                <Button x:Name="btnPrevDiff" Content="▲ Prev Diff" Height="28" Padding="10,0" Margin="0,15,6,0"
+                        Background="{DynamicResource BgButtonDefaultBrush}" Foreground="{DynamicResource TextPrimaryBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" Cursor="Hand" FontWeight="SemiBold"/>
+                <Button x:Name="btnNextDiff" Content="▼ Next Diff" Height="28" Padding="10,0" Margin="0,15,6,0"
+                        Background="{DynamicResource BgButtonDefaultBrush}" Foreground="{DynamicResource TextPrimaryBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" Cursor="Hand" FontWeight="SemiBold"/>
+                <Button x:Name="btnDiffDetails" Content="Diff Inspector" Height="28" Padding="10,0" Margin="0,15,6,0"
+                        Background="{DynamicResource BgButtonDefaultBrush}" Foreground="{DynamicResource TextPrimaryBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" Cursor="Hand" FontWeight="SemiBold"/>
+                <Button x:Name="btnResTheme" Content="Theme" Width="80" Height="28" Margin="0,15,6,0"
                         Background="{DynamicResource BgButtonDefaultBrush}" Foreground="{DynamicResource TextPrimaryBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" Cursor="Hand" FontWeight="SemiBold" FontSize="12"/>
-                <CheckBox x:Name="chkSync" Content="Sync" Foreground="{DynamicResource TextPrimaryBrush}" Margin="4,18,12,0"
+                <CheckBox x:Name="chkSync" Content="Sync" Foreground="{DynamicResource TextPrimaryBrush}" Margin="4,18,10,0"
                           FontSize="12" IsChecked="True" VerticalAlignment="Center"/>
-                <Button x:Name="btnExport" Content="Export" Width="120" Height="28" Margin="0,15,0,0"
+                <Button x:Name="btnExport" Content="Export" Width="100" Height="28" Margin="0,15,6,0"
                         Background="#2563EB" Foreground="White" FontWeight="Bold"
                         BorderThickness="0" Cursor="Hand"/>
+                <Button x:Name="btnExportHtml" Content="Export to HTML" Height="28" Padding="10,0" Margin="0,15,6,0"
+                        Background="#0D9488" Foreground="White" FontWeight="Bold"
+                        BorderThickness="0" Cursor="Hand"/>
+                <Button x:Name="btnCopySummary" Content="Copy Stats" Height="28" Padding="10,0" Margin="0,15,0,0"
+                        Background="{DynamicResource BgButtonDefaultBrush}" Foreground="{DynamicResource TextPrimaryBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" Cursor="Hand" FontWeight="SemiBold"/>
             </WrapPanel>
         </Border>
 
@@ -2182,7 +2664,27 @@ function Show-CompareResult {
             </Grid>
         </Border>
 
-        <Border x:Name="borderSummary" Grid.Row="4" Background="{DynamicResource SummaryBgBrush}" CornerRadius="6"
+        <Border x:Name="borderInspector" Grid.Row="4" Background="{DynamicResource BgCardBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="4" Padding="10,6" Margin="0,5,0,0" Visibility="Collapsed">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="130"/>
+                </Grid.RowDefinitions>
+                <DockPanel Grid.Row="0" Margin="0,0,0,4">
+                    <TextBlock x:Name="lblInspectorTitle" Text="Diff Inspector (Changed Fields)" FontWeight="Bold" FontSize="12" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                    <Button x:Name="btnCloseInspector" Content="✕" Width="22" Height="20" HorizontalAlignment="Right" Background="Transparent" Foreground="{DynamicResource TextMutedBrush}" BorderThickness="0" Cursor="Hand" FontWeight="Bold"/>
+                </DockPanel>
+                <DataGrid x:Name="dgInspector" Grid.Row="1" AutoGenerateColumns="False" IsReadOnly="True" HeadersVisibility="Column" GridLinesVisibility="Horizontal" BorderThickness="1" Background="{DynamicResource BgInputBrush}">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Field / Column" Binding="{Binding Field}" Width="220"/>
+                        <DataGridTextColumn Header="Base Value" Binding="{Binding BaseVal}" Width="*"/>
+                        <DataGridTextColumn Header="Update Value" Binding="{Binding UpdateVal}" Width="*"/>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </Grid>
+        </Border>
+
+        <Border x:Name="borderSummary" Grid.Row="5" Background="{DynamicResource SummaryBgBrush}" CornerRadius="6"
                 Padding="14,8" Margin="0,10,0,0">
             <WrapPanel x:Name="pnlSummary" Orientation="Horizontal" HorizontalAlignment="Center"/>
         </Border>
@@ -2725,6 +3227,13 @@ function Show-CompareResult {
 
 #region 6. Show-CompareWizard function
 function Show-CompareWizard {
+    param (
+        [string]$BasePath = $null,
+        [string]$UpdatePath = $null,
+        [string]$BaseSheet = $null,
+        [string]$UpdateSheet = $null,
+        [string]$PresetPath = $null
+    )
     [xml]$xaml = @"
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -2978,9 +3487,9 @@ function Show-CompareWizard {
 
         <TabControl Grid.Row="1" x:Name="tabs" Margin="14,10,14,10">
 
-            <TabItem x:Name="tabFiles" Header="Files">
+            <TabItem x:Name="tabFiles" Header="Files" AllowDrop="True">
                 <StackPanel Margin="20">
-                    <Border x:Name="cardBase" Background="{DynamicResource BgInputBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="6" Padding="16" Margin="0,0,0,16">
+                    <Border x:Name="cardBase" AllowDrop="True" Background="{DynamicResource BgInputBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="6" Padding="16" Margin="0,0,0,10">
                         <StackPanel>
                             <TextBlock x:Name="lblBaseFile" FontWeight="Bold" FontSize="14" Foreground="{DynamicResource TextPrimaryBrush}" Margin="0,0,0,12"/>
                             <StackPanel Orientation="Horizontal">
@@ -2995,7 +3504,14 @@ function Show-CompareWizard {
                         </StackPanel>
                     </Border>
 
-                    <Border x:Name="cardUpdate" Background="{DynamicResource BgInputBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="6" Padding="16">
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,10">
+                        <Button x:Name="btnSwapFiles" Height="28" Padding="14,0"
+                                Background="{DynamicResource BgButtonDefaultBrush}" Foreground="{DynamicResource TextPrimaryBrush}"
+                                BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
+                                FontWeight="SemiBold" FontSize="12" Cursor="Hand"/>
+                    </StackPanel>
+
+                    <Border x:Name="cardUpdate" AllowDrop="True" Background="{DynamicResource BgInputBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="6" Padding="16">
                         <StackPanel>
                             <TextBlock x:Name="lblUpdateFile" FontWeight="Bold" FontSize="14" Foreground="#14B8A6" Margin="0,0,0,12"/>
                             <StackPanel Orientation="Horizontal">
@@ -3009,6 +3525,9 @@ function Show-CompareWizard {
                             </StackPanel>
                         </StackPanel>
                     </Border>
+
+                    <TextBlock x:Name="lblDropHint" Margin="0,14,0,0" HorizontalAlignment="Center"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="12" FontStyle="Italic"/>
                 </StackPanel>
             </TabItem>
 
@@ -3019,23 +3538,35 @@ function Show-CompareWizard {
                         <RowDefinition Height="*"/>
                         <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
-                    <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,10">
-                        <Button x:Name="btnAutoMap"   Width="200" Height="32" Margin="0,0,10,0"
+                    <WrapPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,10">
+                        <Button x:Name="btnAutoMap"     Width="180" Height="32" Margin="0,0,8,6"
                                 Background="#8B5CF6" Foreground="White" FontWeight="Bold"
                                 BorderThickness="0" Cursor="Hand"/>
-                        <Button x:Name="btnAddMap"    Width="170" Height="32" Margin="0,0,10,0"
+                        <Button x:Name="btnAddMap"      Width="150" Height="32" Margin="0,0,8,6"
                                 Background="#10B981" Foreground="White" FontWeight="Bold"
                                 BorderThickness="0" Cursor="Hand"/>
-                        <Button x:Name="btnEditMap"   Width="140" Height="32" Margin="0,0,10,0"
+                        <Button x:Name="btnEditMap"     Width="130" Height="32" Margin="0,0,8,6"
                                 Background="#2563EB" Foreground="White" FontWeight="Bold"
                                 BorderThickness="0" Cursor="Hand"/>
-                        <Button x:Name="btnRemoveMap" Width="140" Height="32" Margin="0,0,10,0"
+                        <Button x:Name="btnRemoveMap"   Width="130" Height="32" Margin="0,0,8,6"
                                 Background="#EF4444" Foreground="White" FontWeight="Bold"
                                 BorderThickness="0" Cursor="Hand"/>
-                        <Button x:Name="btnClearMap"  Width="120" Height="32"
+                        <Button x:Name="btnClearMap"    Width="100" Height="32" Margin="0,0,8,6"
                                 Background="#64748B" Foreground="White" FontWeight="Bold"
                                 BorderThickness="0" Cursor="Hand"/>
-                    </StackPanel>
+                        <Button x:Name="btnInvertMap"   Width="110" Height="32" Margin="0,0,8,6"
+                                Background="{DynamicResource BgButtonDefaultBrush}" Foreground="{DynamicResource TextPrimaryBrush}"
+                                BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
+                                FontWeight="SemiBold" Cursor="Hand"/>
+                        <Button x:Name="btnSaveProfile" Width="125" Height="32" Margin="0,0,8,6"
+                                Background="{DynamicResource BgButtonDefaultBrush}" Foreground="{DynamicResource TextPrimaryBrush}"
+                                BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
+                                FontWeight="SemiBold" Cursor="Hand"/>
+                        <Button x:Name="btnLoadProfile" Width="125" Height="32" Margin="0,0,8,6"
+                                Background="{DynamicResource BgButtonDefaultBrush}" Foreground="{DynamicResource TextPrimaryBrush}"
+                                BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
+                                FontWeight="SemiBold" Cursor="Hand"/>
+                    </WrapPanel>
                     <DataGrid x:Name="dgMappings" Grid.Row="1"
                               AutoGenerateColumns="False" IsReadOnly="True"
                               CanUserSortColumns="False" SelectionMode="Single"
